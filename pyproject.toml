@@ -1,0 +1,52 @@
+[project]
+name = "poly-web3"
+version = "0.0.1"
+description = "Polymarket Proxy wallet redeem SDK - Execute redeem operations on Polymarket using proxy wallets"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "py-clob-client>=0.25.0",
+    "py-builder-relayer-client>=0.0.1",
+    "web3==6.8",
+    "eth-utils==5.3.1",
+    "setuptools>=80.9.0",
+]
+authors = [
+    {name = "PinBar"}
+]
+keywords = ["polymarket", "web3", "proxy", "wallet", "redeem", "blockchain", "polygon"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+[format]
+line-length = 120
+
+[project.urls]
+"Homepage" = "https://github.com/tosmart01/poly-web3"
+"Repository" = "https://github.com/tosmart01/poly-web3"
+"Bug Tracker" = "https://github.com/tosmart01/poly-web3/issues"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[dependency-groups]
+dev = [
+    "build>=1.3.0",
+    "twine>=6.2.0",
+]
+
+[tool.setuptools.packages.find]
+exclude = [
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+]
