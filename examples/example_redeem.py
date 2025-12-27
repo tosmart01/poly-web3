@@ -44,8 +44,11 @@ if __name__ == "__main__":
     condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
     service = PolyWeb3Service(clob_client=client, relayer_client=relayer_client)
     redeem = service.redeem(condition_id=condition_id)
-    can_redeem = service.is_condition_resolved(condition_id)
-    redeem_balance = service.get_redeemable_index_and_balance(
-        condition_id, owner=client.builder.funder
-    )
-    print(can_redeem, redeem_balance, redeem)
+    print(redeem)
+
+    # Optional - Query operations (可选操作，用于查询)
+    # can_redeem = service.is_condition_resolved(condition_id)
+    # redeem_balance = service.get_redeemable_index_and_balance(
+    #     condition_id, owner=client.builder.funder
+    # )
+    # print(can_redeem, redeem_balance)
