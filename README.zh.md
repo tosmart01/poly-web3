@@ -1,6 +1,6 @@
 # poly-web3
 
-Polymarket Proxy 钱包赎回操作的 Python SDK。支持通过代理钱包（Proxy Wallet）在 Polymarket 上执行条件代币基金（CTF）的赎回操作。
+Polymarket Proxy 钱包赎回操作的 Python SDK。支持通过代理钱包（Proxy Wallet）在 Polymarket 上执行（CTF）的赎回操作，免gas费。
 
 [English](README.md) | 中文
 
@@ -12,8 +12,15 @@ Polymarket Proxy 钱包赎回操作的 Python SDK。支持通过代理钱包（P
 - 本项目**仅实现了官方的 redeem（赎回）功能**，专注于条件代币基金（CTF）的赎回操作
 - 其他功能（如交易、下单等）不在本项目的实现范围内
 
+
+**注意**
+本仓库中与 Polymarket 相关的赎回（redeem）或某些写入型操作依赖于 Polymarket 的 Builder 计划权限。要在真实环境中执行赎回操作，你必须先按照 Polymarket 官方的 Builder 申请流程申请并获得相应的 key/权限。请参阅官方文档并完成申请流程后，将获得使用 Builder API 的凭证，才能让本项目的赎回功能正常工作
+
+Reference / 参考链接：
+- Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
+
 **当前状态：**
-- ✅ **Proxy 代理钱包** - 已完全支持 redeem 功能
+- ✅ **Proxy 代理钱包** - 已完全支持 redeem 功能， 免gas费
 - 🚧 **Safe 钱包** - 开发中
 - 🚧 **EOA 钱包** - 开发中
 

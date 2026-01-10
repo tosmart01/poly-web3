@@ -1,6 +1,6 @@
 # poly-web3
 
-Python SDK for Polymarket Proxy wallet redeem operations. Supports executing Conditional Token Fund (CTF) redeem operations on Polymarket through proxy wallets.
+Python SDK for Polymarket Proxy wallet redeem operations. Supports executing Conditional Token Fund (CTF) redeem operations on Polymarket through proxy wallets, Free gas.
 
 [English](README.md) | [中文](README.zh.md)
 
@@ -11,6 +11,11 @@ This project is a Python rewrite of Polymarket's official TypeScript implementat
 **Important Notes:**
 - This project **only implements the official redeem functionality**, focusing on Conditional Token Fund (CTF) redeem operations
 - Other features (such as trading, order placement, etc.) are not within the scope of this project
+
+**Some Polymarket-related redeem or write operations implemented in this project depend on access granted through Polymarket's Builder program. To perform real redeem operations against Polymarket, you must apply for and obtain a Builder key/credentials via Polymarket's official Builder application process. After approval you will receive the credentials required to use the Builder API—only then will the redeem flows in this repository work against the live service. For local development or automated tests, use mocks or testnet setups instead of real keys to avoid exposing production credentials.**
+
+Reference：
+- Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
 
 **Current Status:**
 - ✅ **Proxy Wallet** - Fully supported for redeem functionality
