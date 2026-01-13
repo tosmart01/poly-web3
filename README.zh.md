@@ -107,13 +107,16 @@ service = PolyWeb3Service(
     rpc_url="https://polygon-bor.publicnode.com",  # 可选
 )
 
-# 执行赎回操作
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-redeem_result = service.redeem(condition_id=condition_id)
-print(f"赎回结果: {redeem_result}")
+# 执行赎回操作（批量）
+condition_ids = [
+    "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+]
+redeem_batch_result = service.redeem(condition_ids, batch_size=20)
+print(f"批量赎回结果: {redeem_batch_result}")
 
 # 赎回当前账户下所有可赎回仓位
-redeem_all_result = service.redeem_all()
+redeem_all_result = service.redeem_all(batch_size=20)
 print(f"全部赎回结果: {redeem_all_result}")
 ```
 
@@ -174,33 +177,28 @@ print(f"可赎回余额: {redeem_balance}")
 **返回:**
 - `list[tuple]`: 包含 (index, balance) 元组的列表，余额单位为 USDC
 
-##### `redeem(condition_id: str, neg_risk: bool = False, redeem_amounts: list[int] | None = None)`
+##### `redeem(condition_ids: str | list[str], batch_size: int = 20)`
 
 执行赎回操作。
 
 **参数:**
-- `condition_id` (str): 条件 ID
-- `neg_risk` (bool): 是否为负风险赎回，默认为 `False`
-- `redeem_amounts` (list[int] | None): 负风险赎回时的金额列表，必须包含 2 个元素
+- `condition_ids` (str | list[str]): 条件 ID 或条件 ID 列表
+- `batch_size` (int): 每批次处理数量
 
 **返回:**
-- `dict`: 交易结果，包含交易状态和相关信息
+- `dict | list[dict]`: 交易结果，包含交易状态和相关信息
 
 **示例:**
 
 ```python
-# 标准 CTF 赎回
-result = service.redeem(condition_id="0x...")
+# 单笔赎回
+result = service.redeem("0x...")
 
-# 负风险赎回
-result = service.redeem(
-    condition_id="0x...",
-    neg_risk=True,
-    redeem_amounts=[1000000, 2000000]  # 单位为最小单位（6 位小数）
-)
+# 批量赎回
+result = service.redeem(["0x...", "0x..."], batch_size=20)
 ```
 
-##### `redeem_all() -> list[dict] | None`
+##### `redeem_all(batch_size: int = 20) -> list[dict] | None`
 
 赎回当前账户下所有可赎回仓位。
 
@@ -211,7 +209,7 @@ result = service.redeem(
 
 ```python
 # 赎回所有可赎回仓位
-service.redeem_all()
+service.redeem_all(batch_size=20)
 ```
 
 ## 项目结构

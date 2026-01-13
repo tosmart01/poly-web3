@@ -41,18 +41,22 @@ if __name__ == "__main__":
             )
         ),
     )
-    condition_id = "0x38124532c68bf16aa5800433118463acdbf09152237b45bb9e11bd4b73e0d1c4"
+    condition_id = "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2"
     service = PolyWeb3Service(
         clob_client=client,
         relayer_client=relayer_client,
         rpc_url="https://polygon-bor.publicnode.com",
     )
-    # Redeem by condition_id
-    redeem = service.redeem(condition_id=condition_id)
-    print(redeem)
+    # Redeem in batch
+    condition_ids = [
+        condition_id,
+        "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+    ]
+    redeem_batch = service.redeem(condition_ids, batch_size=10)
+    print(redeem_batch)
 
     # Redeem all positions that are currently redeemable (returns list or None)
-    redeem_all = service.redeem_all()
+    redeem_all = service.redeem_all(batch_size=10)
     print(redeem_all)
 
     # Optional - Query operations (可选操作，用于查询)

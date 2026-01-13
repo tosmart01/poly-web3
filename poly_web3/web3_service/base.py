@@ -79,6 +79,34 @@ class BaseWeb3Service:
             logger.error(f"Failed to fetch positions from API: {e}")
             return []
 
+    @classmethod
+    def fetch_positions_by_condition_ids(
+            cls, user_address: str, condition_ids: list[str]
+    ) -> list[dict]:
+        """
+        Fetches positions for a user filtered by condition IDs.
+
+        :param user_address: User wallet address (0x-prefixed, 40 hex chars)
+        :param condition_ids: List of condition IDs to filter by
+        :return: List of position dictionaries from the API
+        """
+        if not condition_ids:
+            return []
+        url = "https://data-api.polymarket.com/positions"
+        params = {
+            "user": user_address,
+            "market": ",".join(condition_ids),
+            "sizeThreshold": 1
+        }
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            positions = response.json()
+            return [i for i in positions if i.get("percentPnl") > 0]
+        except Exception as e:
+            print(f"Failed to fetch positions from API: {e}")
+            return []
+
     def is_condition_resolved(self, condition_id: str) -> bool:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_PAYOUT)
         return ctf.functions.payoutDenominator(condition_id).call() > 0
@@ -172,9 +200,7 @@ class BaseWeb3Service:
 
     def redeem(
             self,
-            condition_id: str,
-            neg_risk: bool = False,
-            redeem_amounts: list[int] | None = None,
+            condition_ids: str | list[str],
     ):  # noqa:
         raise ImportError()
 

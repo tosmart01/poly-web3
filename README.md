@@ -104,13 +104,17 @@ service = PolyWeb3Service(
     rpc_url="https://polygon-bor.publicnode.com",  # optional
 )
 
-# Execute redeem operation
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-redeem_result = service.redeem(condition_id=condition_id)
-print(f"Redeem result: {redeem_result}")
+
+# Execute redeem operation (batch)
+condition_ids = [
+    "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+]
+redeem_batch_result = service.redeem(condition_ids, batch_size=20)
+print(f"Redeem batch result: {redeem_batch_result}")
 
 # Redeem all positions that are currently redeemable
-redeem_all_result = service.redeem_all()
+redeem_all_result = service.redeem_all(batch_size=20)
 print(f"Redeem all result: {redeem_all_result}")
 ```
 
@@ -171,33 +175,25 @@ Get redeemable indexes and balances for the specified address.
 **Returns:**
 - `list[tuple]`: List of tuples containing (index, balance), balance is in USDC units
 
-##### `redeem(condition_id: str, neg_risk: bool = False, redeem_amounts: list[int] | None = None)`
+##### `redeem(condition_ids: list[str], batch_size: int = 20)`
 
 Execute redeem operation.
 
 **Parameters:**
-- `condition_id` (str): Condition ID
-- `neg_risk` (bool): Whether it's a negative risk redeem, defaults to `False`
-- `redeem_amounts` (list[int] | None): Amount list for negative risk redeem, must contain 2 elements
+- `condition_ids` (list[str]): List of condition IDs
+- `batch_size` (int): Batch size for redeem requests
 
 **Returns:**
-- `dict`: Transaction result containing transaction status and related information
+- `dict | list[dict]`: Transaction result(s) containing transaction status and related information
 
 **Examples:**
 
 ```python
-# Standard CTF redeem
-result = service.redeem(condition_id="0x...")
-
-# Negative risk redeem
-result = service.redeem(
-    condition_id="0x...",
-    neg_risk=True,
-    redeem_amounts=[1000000, 2000000]  # Amounts in smallest unit (6 decimal places)
-)
+# Batch redeem
+result = service.redeem(["0x...", "0x..."], batch_size=20)
 ```
 
-##### `redeem_all() -> list[dict] | None`
+##### `redeem_all(batch_size: int = 20) -> list[dict] | None`
 
 Redeem all positions that are currently redeemable for the authenticated account.
 
@@ -208,7 +204,7 @@ Redeem all positions that are currently redeemable for the authenticated account
 
 ```python
 # Redeem all positions that can be redeemed
-service.redeem_all()
+service.redeem_all(batch_size=20)
 ```
 
 ## Project Structure

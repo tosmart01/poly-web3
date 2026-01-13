@@ -94,21 +94,70 @@ class ProxyWeb3Service(BaseWeb3Service):
 
         return function_data
 
-    def redeem(
-            self,
-            condition_id: str,
-            neg_risk: bool = False,
-            redeem_amounts: list[int] | None = None,
-    ):
-        if neg_risk:
-            if redeem_amounts is None or len(redeem_amounts) != 2:
-                raise Exception("negRisk redeem requires redeem_amounts with length 2")
-            tx_data = self.build_neg_risk_redeem_tx_data(condition_id, redeem_amounts)
-            tx_to = NEG_RISK_ADAPTER_ADDRESS
-        else:
-            tx_data = self.build_ctf_redeem_tx_data(condition_id)
-            tx_to = CTF_ADDRESS
-        tx = {"to": tx_to, "data": tx_data, "value": 0, "typeCode": 1}
+    def _build_redeem_txs_from_positions(self, positions: list[dict]) -> list[dict]:
+        neg_amounts_by_condition: dict[str, list[float]] = {}
+        normal_conditions: set[str] = set()
+        for pos in positions:
+            condition_id = pos.get("conditionId")
+            if not condition_id:
+                continue
+            if pos.get("negativeRisk"):
+                idx = pos.get("outcomeIndex")
+                size = pos.get("size")
+                if idx is None or size is None:
+                    continue
+                amounts = neg_amounts_by_condition.setdefault(condition_id, [0.0, 0.0])
+                if idx not in (0, 1):
+                    raise Exception(f"negRisk outcomeIndex out of range: {idx}")
+                amounts[idx] += size
+            else:
+                normal_conditions.add(condition_id)
+        txs: list[dict] = []
+        for condition_id, amounts in neg_amounts_by_condition.items():
+            int_amounts = [int(amount * 1e6) for amount in amounts]
+            txs.append(
+                {
+                    "to": NEG_RISK_ADAPTER_ADDRESS,
+                    "data": self.build_neg_risk_redeem_tx_data(condition_id, int_amounts),
+                    "value": 0,
+                    "typeCode": 1,
+                }
+            )
+        for condition_id in normal_conditions:
+            txs.append(
+                {
+                    "to": CTF_ADDRESS,
+                    "data": self.build_ctf_redeem_tx_data(condition_id),
+                    "value": 0,
+                    "typeCode": 1,
+                }
+            )
+        return txs
+
+    @classmethod
+    def _chunk_condition_ids(
+            cls, condition_ids: list[str], batch_size: int
+    ) -> list[list[str]]:
+        if batch_size <= 0:
+            raise Exception("batch_size must be greater than 0")
+        return [
+            condition_ids[i: i + batch_size]
+            for i in range(0, len(condition_ids), batch_size)
+        ]
+
+    def _redeem_batch(self, condition_ids: list[str], batch_size: int) -> list[dict]:
+        if not condition_ids:
+            return []
+        user_address = self._resolve_user_address()
+        redeem_list = []
+        for batch in self._chunk_condition_ids(condition_ids, batch_size):
+            positions = self.fetch_positions_by_condition_ids(
+                user_address=user_address, condition_ids=batch
+            )
+            redeem_list.extend(self._redeem_from_positions(positions, len(batch)))
+        return redeem_list
+
+    def _submit_proxy_redeem(self, txs: list[dict]) -> dict:
         if self.clob_client is None:
             raise Exception("signer not found")
         _from = Web3.to_checksum_address(self.clob_client.get_address())
@@ -116,7 +165,7 @@ class ProxyWeb3Service(BaseWeb3Service):
         args = {
             "from": _from,
             "gasPrice": "0",
-            "data": self.encode_proxy_transaction_data([tx]),
+            "data": self.encode_proxy_transaction_data(txs),
             "relay": rp["address"],
             "nonce": rp["nonce"],
         }
@@ -135,30 +184,52 @@ class ProxyWeb3Service(BaseWeb3Service):
         )
         return redeem_res
 
-    def redeem_all(self) -> list[dict]:
-        positions = self.fetch_positions(user_address=self._resolve_user_address())
+    def _redeem_from_positions(
+            self, positions: list[dict], batch_size: int
+    ) -> list[dict]:
         if not positions:
             return []
-        redeem_list = []
+        positions_by_condition: dict[str, list[dict]] = {}
         for pos in positions:
             condition_id = pos.get("conditionId")
+            if not condition_id:
+                continue
+            positions_by_condition.setdefault(condition_id, []).append(pos)
+
+        redeem_list = []
+        condition_ids = list(positions_by_condition.keys())
+        for batch in self._chunk_condition_ids(condition_ids, batch_size):
+            batch_positions = []
+            for condition_id in batch:
+                batch_positions.extend(positions_by_condition.get(condition_id, []))
             try:
-                can_redeem = self.get_redeemable_index_and_balance(condition_id)
-                if not can_redeem:
+                txs = self._build_redeem_txs_from_positions(batch_positions)
+                if not txs:
                     continue
-                if pos.get("negativeRisk"):
-                    amounts = [0, 0]
-                    amounts[pos.get("outcomeIndex")] = pos.get("size")
-                    int_amounts = [int(amount * 1e6) for amount in amounts]
-                    redeem_res = self.redeem(condition_id=condition_id, redeem_amounts=int_amounts, neg_risk=True)
-                else:
-                    redeem_res = self.redeem(condition_id=condition_id)
-            except Exception as e:
-                logger.error(f"redeem error, {condition_id=}, error={e}")
-            else:
+                redeem_res = self._submit_proxy_redeem(txs)
                 redeem_list.append(redeem_res)
-                buy_price = pos.get("avgPrice")
-                size = pos.get("size")
-                volume = 1 / buy_price * (buy_price * size)
-                logger.info(f"slug={pos.get('slug')} redeem success, volume={volume:.4f} usdc")
+                for pos in batch_positions:
+                    buy_price = pos.get("avgPrice")
+                    size = pos.get("size")
+                    if not buy_price or not size:
+                        continue
+                    volume = 1 / buy_price * (buy_price * size)
+                    logger.info(
+                        f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc"
+                    )
+            except Exception as e:
+                logger.info(f"redeem batch error, {batch=}, error={e}")
         return redeem_list
+
+    def redeem(
+            self,
+            condition_ids: str | list[str],
+            batch_size: int = 10,
+    ):
+        if isinstance(condition_ids, str):
+            condition_ids = [condition_ids]
+        return self._redeem_batch(condition_ids, batch_size)
+
+    def redeem_all(self, batch_size: int = 10) -> list[dict]:
+        positions = self.fetch_positions(user_address=self._resolve_user_address())
+        return self._redeem_from_positions(positions, batch_size)
