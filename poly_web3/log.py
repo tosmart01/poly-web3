@@ -9,15 +9,17 @@ import sys
 
 LOGGER_NAME = "poly_web3"
 
-logger = logging.getLogger(LOGGER_NAME)
-logger.addHandler(logging.NullHandler())
-
 
 def configure_logging(
         level: int = logging.INFO,
         stream=sys.stdout,
         formatter: logging.Formatter | None = None,
 ):
+    try:
+        from loguru import logger
+        return logger
+    except:
+        pass
     if formatter is None:
         formatter = logging.Formatter(
             "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d  %(message)s",
@@ -34,15 +36,4 @@ def configure_logging(
     return target
 
 
-def _ensure_default_logging():
-    target = logging.getLogger(LOGGER_NAME)
-    if target.handlers and not all(
-        isinstance(h, logging.NullHandler) for h in target.handlers
-    ):
-        return
-    if logging.getLogger().handlers:
-        return
-    configure_logging()
-
-
-_ensure_default_logging()
+logger = configure_logging()

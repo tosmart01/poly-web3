@@ -1,12 +1,12 @@
 # poly-web3
 
-Polymarket Proxy 钱包赎回操作的 Python SDK。支持通过代理钱包（Proxy Wallet）在 Polymarket 上执行（CTF）的赎回操作，免gas费。
+Polymarket Proxy 与 Safe 钱包赎回操作的 Python SDK。支持通过 Proxy/Safe 钱包在 Polymarket 上执行（CTF）的赎回操作，免gas费。
 
 [English](README.md) | 中文
 
 ## 关于项目
 
-本项目是对Polymarket 官方 TypeScript 实现的 `builder-relayer-client` 的 Python 重写版本，旨在为 Python 开发者提供在 Polymarket 上执行代理钱包赎回操作的便捷工具。
+本项目是对Polymarket 官方 TypeScript 实现的 `builder-relayer-client` 的 Python 重写版本，旨在为 Python 开发者提供在 Polymarket 上执行 Proxy 与 Safe 钱包赎回操作的便捷工具。
 
 **重要说明：**
 - 本项目**仅实现了官方的 redeem（赎回）功能**，专注于条件代币基金（CTF）的赎回操作
@@ -21,14 +21,14 @@ Reference / 参考链接：
 
 **当前状态：**
 - ✅ **Proxy 代理钱包** - 已完全支持 redeem 功能， 免gas费
-- 🚧 **Safe 钱包** - 开发中
+- ✅ **Safe 钱包** - 已完全支持 redeem 功能
 - 🚧 **EOA 钱包** - 开发中
 
-我们欢迎社区贡献！如果您想帮助实现 Safe 或 EOA 钱包的 redeem 功能支持，或者有其他改进建议，欢迎提交 Pull Request。
+我们欢迎社区贡献！如果您想帮助实现 EOA 钱包的 redeem 功能支持，或者有其他改进建议，欢迎提交 Pull Request。
 
 ## 功能特性
 
-- ✅ 支持 Polymarket Proxy 代理钱包赎回操作（当前仅支持 Proxy 钱包）
+- ✅ 支持 Polymarket Proxy 与 Safe 钱包赎回操作
 - ✅ 检查条件是否已解决（resolved）
 - ✅ 获取可赎回的索引和余额
 - ✅ 支持标准 CTF 赎回和负风险（neg_risk）赎回
@@ -80,7 +80,7 @@ client = ClobClient(
     host,
     key=os.getenv("POLY_API_KEY"),
     chain_id=chain_id,
-    signature_type=1,  # Proxy 钱包类型
+    signature_type=1,  # Proxy 钱包类型（signature_type=2 Safe）
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
@@ -227,14 +227,14 @@ poly_web3/
     ├── base.py             # 基础服务类
     ├── proxy_service.py    # Proxy 钱包服务（✅ 已实现）
     ├── eoa_service.py      # EOA 钱包服务（🚧 开发中）
-    └── safe_service.py     # Safe 钱包服务（🚧 开发中）
+    └── safe_service.py     # Safe 钱包服务（✅ 已实现）
 ```
 
 ## 注意事项
 
 1. **环境变量安全**: 请确保 `.env` 文件已添加到 `.gitignore`，不要将敏感信息提交到代码仓库
 2. **网络支持**: 目前主要支持 Polygon 主网（chain_id: 137），Amoy 测试网部分功能可能受限
-3. **钱包类型**: **目前仅支持 Proxy 代理钱包**（signature_type: 1），Safe 和 EOA 钱包的赎回功能正在开发中
+3. **钱包类型**: 已支持 Proxy（signature_type: 1）和 Safe（signature_type: 2），EOA 钱包赎回功能仍在开发中
 4. **Gas 费用**: 通过 Relayer 执行交易，Gas 费用由 Relayer 处理
 
 ## 开发
@@ -255,7 +255,7 @@ python examples/example_redeem.py
 
 我们欢迎所有形式的贡献！如果您想：
 
-- 实现 Safe 或 EOA 钱包支持
+- 实现 EOA 钱包支持
 - 修复 bug 或改进现有功能
 - 添加新功能或改进文档
 - 提出建议或报告问题

@@ -24,7 +24,7 @@ if __name__ == "__main__":
         host,
         key=os.getenv("POLY_API_KEY"),
         chain_id=chain_id,
-        signature_type=1,
+        signature_type=1,  # signature_type=2 for Safe
         funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
     )
     creds = client.create_or_derive_api_creds()

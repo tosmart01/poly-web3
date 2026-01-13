@@ -1,12 +1,12 @@
 # poly-web3
 
-Python SDK for Polymarket Proxy wallet redeem operations. Supports executing Conditional Token Fund (CTF) redeem operations on Polymarket through proxy wallets, Free gas.
+Python SDK for Polymarket Proxy and Safe wallet redeem operations. Supports executing Conditional Token Fund (CTF) redeem operations on Polymarket through Proxy/Safe wallets, free gas.
 
 [English](README.md) | [中文](README.zh.md)
 
 ## About the Project
 
-This project is a Python rewrite of Polymarket's official TypeScript implementation of `builder-relayer-client`, designed to provide Python developers with a convenient tool for executing proxy wallet redeem operations on Polymarket.
+This project is a Python rewrite of Polymarket's official TypeScript implementation of `builder-relayer-client`, designed to provide Python developers with a convenient tool for executing Proxy and Safe wallet redeem operations on Polymarket.
 
 **Important Notes:**
 - This project **only implements the official redeem functionality**, focusing on Conditional Token Fund (CTF) redeem operations
@@ -19,14 +19,14 @@ Reference：
 
 **Current Status:**
 - ✅ **Proxy Wallet** - Fully supported for redeem functionality
-- 🚧 **Safe Wallet** - Under development
+- ✅ **Safe Wallet** - Fully supported for redeem functionality
 - 🚧 **EOA Wallet** - Under development
 
-We welcome community contributions! If you'd like to help implement Safe or EOA wallet redeem functionality, or have other improvement suggestions, please feel free to submit a Pull Request.
+We welcome community contributions! If you'd like to help implement EOA wallet redeem functionality, or have other improvement suggestions, please feel free to submit a Pull Request.
 
 ## Features
 
-- ✅ Support for Polymarket Proxy wallet redeem operations (currently only Proxy wallet is supported)
+- ✅ Support for Polymarket Proxy and Safe wallet redeem operations
 - ✅ Check if conditions are resolved
 - ✅ Get redeemable indexes and balances
 - ✅ Support for standard CTF redeem and negative risk (neg_risk) redeem
@@ -77,7 +77,7 @@ client = ClobClient(
     host,
     key=os.getenv("POLY_API_KEY"),
     chain_id=chain_id,
-    signature_type=1,  # Proxy wallet type
+    signature_type=1,  # Proxy wallet type (signature_type=2 for Safe)
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
@@ -222,14 +222,14 @@ poly_web3/
     ├── base.py             # Base service class
     ├── proxy_service.py    # Proxy wallet service (✅ Implemented)
     ├── eoa_service.py      # EOA wallet service (🚧 Under development)
-    └── safe_service.py     # Safe wallet service (🚧 Under development)
+    └── safe_service.py     # Safe wallet service (✅ Implemented)
 ```
 
 ## Notes
 
 1. **Environment Variable Security**: Make sure `.env` file is added to `.gitignore`, do not commit sensitive information to the code repository
 2. **Network Support**: Currently mainly supports Polygon mainnet (chain_id: 137), Amoy testnet may have limited functionality
-3. **Wallet Type**: **Currently only Proxy wallet is supported** (signature_type: 1), Safe and EOA wallet redeem functionality is under development
+3. **Wallet Type**: Proxy (signature_type: 1) and Safe (signature_type: 2) are supported; EOA wallet redeem functionality is under development
 4. **Gas Fees**: Transactions are executed through Relayer, gas fees are handled by the Relayer
 
 ## Development
@@ -250,7 +250,7 @@ python examples/example_redeem.py
 
 We welcome all forms of contributions! If you'd like to:
 
-- Implement Safe or EOA wallet support
+- Implement EOA wallet support
 - Fix bugs or improve existing functionality
 - Add new features or improve documentation
 - Make suggestions or report issues
