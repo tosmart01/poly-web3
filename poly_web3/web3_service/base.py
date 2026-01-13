@@ -4,10 +4,12 @@
 # @Site:
 # @File: base.py
 # @Software: PyCharm
-import requests
+from typing import Any
+
 from py_builder_relayer_client.client import RelayClient
 from py_clob_client.client import ClobClient
 from web3 import Web3
+import requests
 
 from poly_web3.const import (
     RPC_URL,
@@ -166,6 +168,107 @@ class BaseWeb3Service:
             redeem_amounts,
         )._encode_transaction_data()
 
+    def _build_redeem_tx(self, to: str, data: str) -> Any:
+        raise NotImplementedError("redeem tx builder not implemented")
+
+    def _build_redeem_txs_from_positions(self, positions: list[dict]) -> list[Any]:
+        neg_amounts_by_condition: dict[str, list[float]] = {}
+        normal_conditions: set[str] = set()
+        for pos in positions:
+            condition_id = pos.get("conditionId")
+            if not condition_id:
+                continue
+            if pos.get("negativeRisk"):
+                idx = pos.get("outcomeIndex")
+                size = pos.get("size")
+                if idx is None or size is None:
+                    continue
+                amounts = neg_amounts_by_condition.setdefault(condition_id, [0.0, 0.0])
+                if idx not in (0, 1):
+                    raise Exception(f"negRisk outcomeIndex out of range: {idx}")
+                amounts[idx] += size
+            else:
+                normal_conditions.add(condition_id)
+        txs: list[Any] = []
+        for condition_id, amounts in neg_amounts_by_condition.items():
+            int_amounts = [int(amount * 1e6) for amount in amounts]
+            txs.append(
+                self._build_redeem_tx(
+                    NEG_RISK_ADAPTER_ADDRESS,
+                    self.build_neg_risk_redeem_tx_data(condition_id, int_amounts),
+                )
+            )
+        for condition_id in normal_conditions:
+            txs.append(
+                self._build_redeem_tx(
+                    CTF_ADDRESS,
+                    self.build_ctf_redeem_tx_data(condition_id),
+                )
+            )
+        return txs
+
+    def _submit_redeem(self, txs: list[Any]) -> dict | None:
+        raise NotImplementedError("redeem submit not implemented")
+
+    def _redeem_batch(self, condition_ids: list[str], batch_size: int) -> list[dict]:
+        """
+        Fetch positions by condition IDs in batches, then redeem each batch.
+        """
+        if not condition_ids:
+            return []
+        user_address = self._resolve_user_address()
+        redeem_list = []
+        for batch in self._chunk_condition_ids(condition_ids, batch_size):
+            positions = self.fetch_positions_by_condition_ids(
+                user_address=user_address, condition_ids=batch
+            )
+            redeem_list.extend(self._redeem_from_positions(positions, len(batch)))
+        return redeem_list
+
+    def _redeem_from_positions(
+            self, positions: list[dict], batch_size: int
+    ) -> list[dict]:
+        """
+        Build and submit redeem transactions from a list of positions.
+        """
+        if not positions:
+            return []
+        positions_by_condition: dict[str, list[dict]] = {}
+        for pos in positions:
+            condition_id = pos.get("conditionId")
+            if not condition_id:
+                continue
+            positions_by_condition.setdefault(condition_id, []).append(pos)
+
+        redeem_list = []
+        error_list: list[str] = []
+        condition_ids = list(positions_by_condition.keys())
+        for batch in self._chunk_condition_ids(condition_ids, batch_size):
+            batch_positions = []
+            for condition_id in batch:
+                batch_positions.extend(positions_by_condition.get(condition_id, []))
+            try:
+                txs = self._build_redeem_txs_from_positions(batch_positions)
+                if not txs:
+                    continue
+                redeem_res = self._submit_redeem(txs)
+                redeem_list.append(redeem_res)
+                for pos in batch_positions:
+                    buy_price = pos.get("avgPrice")
+                    size = pos.get("size")
+                    if not buy_price or not size:
+                        continue
+                    volume = 1 / buy_price * (buy_price * size)
+                    logger.info(
+                        f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc"
+                    )
+            except Exception as e:
+                error_list.extend(batch)
+                logger.info(f"redeem batch error, {batch=}, error={e}")
+        if error_list:
+            logger.warning(f"error redeem condition list, {error_list}")
+        return redeem_list
+
     @classmethod
     def _get_relay_payload(cls, address: str, wallet_type: WalletType):
         return requests.get(
@@ -198,11 +301,32 @@ class BaseWeb3Service:
         else:
             raise Exception("Estimate gas error: " + str(result))
 
+    @classmethod
+    def _chunk_condition_ids(
+            cls, condition_ids: list[str], batch_size: int
+    ) -> list[list[str]]:
+        if batch_size <= 0:
+            raise Exception("batch_size must be greater than 0")
+        return [
+            condition_ids[i: i + batch_size]
+            for i in range(0, len(condition_ids), batch_size)
+        ]
+
     def redeem(
             self,
             condition_ids: str | list[str],
-    ):  # noqa:
-        raise ImportError()
+            batch_size: int = 10,
+    ):
+        """
+        Redeem positions for the given condition IDs.
+        """
+        if isinstance(condition_ids, str):
+            condition_ids = [condition_ids]
+        return self._redeem_batch(condition_ids, batch_size)
 
-    def redeem_all(self) -> list[dict] | None:
-        raise ImportError()
+    def redeem_all(self, batch_size: int = 10) -> list[dict]:
+        """
+        Redeem all currently redeemable positions for the user.
+        """
+        positions = self.fetch_positions(user_address=self._resolve_user_address())
+        return self._redeem_from_positions(positions, batch_size)

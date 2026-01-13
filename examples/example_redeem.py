@@ -24,7 +24,7 @@ if __name__ == "__main__":
         host,
         key=os.getenv("POLY_API_KEY"),
         chain_id=chain_id,
-        signature_type=1,
+        signature_type=1,  # signature_type=2 for Safe
         funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
     )
     creds = client.create_or_derive_api_creds()
@@ -41,7 +41,6 @@ if __name__ == "__main__":
             )
         ),
     )
-    condition_id = "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2"
     service = PolyWeb3Service(
         clob_client=client,
         relayer_client=relayer_client,
@@ -49,7 +48,6 @@ if __name__ == "__main__":
     )
     # Redeem in batch
     condition_ids = [
-        condition_id,
         "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
     ]
     redeem_batch = service.redeem(condition_ids, batch_size=10)

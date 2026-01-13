@@ -10,8 +10,10 @@ from poly_web3.web3_service.base import BaseWeb3Service
 class EOAWeb3Service(BaseWeb3Service):
     def redeem(
         self,
-        condition_id: str,
-        neg_risk: bool = False,
-        redeem_amounts: list[int] | None = None,
+        condition_ids: str | list[str],
+        batch_size: int = 10,
     ):
+        raise ImportError("EOA wallet redeem not supported")
+
+    def redeem_all(self, batch_size: int = 10) -> list[dict]:
         raise ImportError("EOA wallet redeem not supported")
