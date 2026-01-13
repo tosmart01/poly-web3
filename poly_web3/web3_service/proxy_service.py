@@ -24,6 +24,7 @@ from poly_web3.web3_service.base import BaseWeb3Service
 from poly_web3.signature.build import derive_proxy_wallet, create_struct_hash
 from poly_web3.signature.hash_message import hash_message
 from poly_web3.signature import secp256k1
+from poly_web3.log import logger
 
 
 class ProxyWeb3Service(BaseWeb3Service):
@@ -153,11 +154,11 @@ class ProxyWeb3Service(BaseWeb3Service):
                 else:
                     redeem_res = self.redeem(condition_id=condition_id)
             except Exception as e:
-                print(f"redeem error, {condition_id=}, error={e}")
+                logger.error(f"redeem error, {condition_id=}, error={e}")
             else:
                 redeem_list.append(redeem_res)
                 buy_price = pos.get("avgPrice")
                 size = pos.get("size")
                 volume = 1 / buy_price * (buy_price * size)
-                print(f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc")
+                logger.info(f"slug={pos.get('slug')} redeem success, volume={volume:.4f} usdc")
         return redeem_list

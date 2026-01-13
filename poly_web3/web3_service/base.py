@@ -24,6 +24,7 @@ from poly_web3.const import (
     NEG_RISK_ADAPTER_ABI_REDEEM,
 )
 from poly_web3.schema import WalletType
+from poly_web3.log import logger
 
 
 class BaseWeb3Service:
@@ -75,7 +76,7 @@ class BaseWeb3Service:
             positions = response.json()
             return [i for i in positions if i.get("percentPnl") > 0]
         except Exception as e:
-            print(f"Failed to fetch positions from API: {e}")
+            logger.error(f"Failed to fetch positions from API: {e}")
             return []
 
     def is_condition_resolved(self, condition_id: str) -> bool:
