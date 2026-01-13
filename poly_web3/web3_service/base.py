@@ -28,9 +28,10 @@ from poly_web3.schema import WalletType
 
 class BaseWeb3Service:
     def __init__(
-        self,
-        clob_client: ClobClient = None,
-        relayer_client: RelayClient = None,
+            self,
+            clob_client: ClobClient = None,
+            relayer_client: RelayClient = None,
+            rpc_url: str | None = None,
     ):
         self.relayer_client = relayer_client
         self.clob_client: ClobClient = clob_client
@@ -40,9 +41,42 @@ class BaseWeb3Service:
             )
         else:
             self.wallet_type = WalletType.PROXY
-        self.w3: Web3 = Web3(Web3.HTTPProvider(RPC_URL))
+        self.rpc_url = rpc_url or RPC_URL
+        self.w3: Web3 = Web3(Web3.HTTPProvider(self.rpc_url))
         if self.wallet_type == WalletType.PROXY and relayer_client is None:
             raise Exception("relayer_client must be provided")
+
+    def _resolve_user_address(self):
+        funder = getattr(getattr(self.clob_client, "builder", None), "funder", None)
+        if funder:
+            return funder
+        return self.clob_client.get_address()
+
+    @classmethod
+    def fetch_positions(cls, user_address: str) -> list[dict]:
+        """
+        Fetches current positions for a user from the official Polymarket API.
+
+        :param user_address: User wallet address (0x-prefixed, 40 hex chars)
+        :return: List of position dictionaries from the API
+        """
+        url = "https://data-api.polymarket.com/positions"
+        params = {
+            "user": user_address,
+            "sizeThreshold": 1,
+            "limit": 100,
+            "redeemable": True,
+            "sortBy": "RESOLVING",
+            "sortDirection": "DESC",
+        }
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            positions = response.json()
+            return [i for i in positions if i.get("percentPnl") > 0]
+        except Exception as e:
+            print(f"Failed to fetch positions from API: {e}")
+            return []
 
     def is_condition_resolved(self, condition_id: str) -> bool:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_PAYOUT)
@@ -60,8 +94,9 @@ class BaseWeb3Service:
         return winners
 
     def get_redeemable_index_and_balance(
-        self, condition_id: str, owner: str
+            self, condition_id: str
     ) -> list[tuple]:
+        owner = self._resolve_user_address()
         winners = self.get_winning_indexes(condition_id)
         if not winners:
             return []
@@ -92,7 +127,7 @@ class BaseWeb3Service:
         )._encode_transaction_data()
 
     def build_neg_risk_redeem_tx_data(
-        self, condition_id: str, redeem_amounts: list[int]
+            self, condition_id: str, redeem_amounts: list[int]
     ) -> str:
         nr_adapter = self.w3.eth.contract(
             address=NEG_RISK_ADAPTER_ADDRESS, abi=NEG_RISK_ADAPTER_ABI_REDEEM
@@ -124,7 +159,7 @@ class BaseWeb3Service:
             "id": 1,
         }
 
-        response = requests.post(RPC_URL, json=payload)
+        response = requests.post(self.rpc_url, json=payload)
         result = response.json()
 
         if "result" in result:
@@ -135,9 +170,12 @@ class BaseWeb3Service:
             raise Exception("Estimate gas error: " + str(result))
 
     def redeem(
-        self,
-        condition_id: str,
-        neg_risk: bool = False,
-        redeem_amounts: list[int] | None = None,
+            self,
+            condition_id: str,
+            neg_risk: bool = False,
+            redeem_amounts: list[int] | None = None,
     ):  # noqa:
+        raise ImportError()
+
+    def redeem_all(self) -> list[dict] | None:
         raise ImportError()

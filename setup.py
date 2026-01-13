@@ -19,7 +19,7 @@ README_PATH = HERE / PROJECT.get("readme", "README.md")
 
 setup(
     name=PROJECT.get("name", "poly-web3"),
-    version=PROJECT.get("version", "0.0.1"),
+    version=PROJECT.get("version", "0.0.2"),
     description=PROJECT.get("description", ""),
     long_description=README_PATH.read_text(encoding="utf-8") if README_PATH.exists() else "",
     long_description_content_type="text/markdown",

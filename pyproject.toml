@@ -1,6 +1,6 @@
 [project]
 name = "poly-web3"
-version = "0.0.1"
+version = "0.0.2"
 description = "Polymarket Proxy wallet redeem SDK - Execute redeem operations on Polymarket using proxy wallets"
 readme = "README.md"
 requires-python = ">=3.11"

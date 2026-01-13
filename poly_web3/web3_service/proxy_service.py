@@ -94,10 +94,10 @@ class ProxyWeb3Service(BaseWeb3Service):
         return function_data
 
     def redeem(
-        self,
-        condition_id: str,
-        neg_risk: bool = False,
-        redeem_amounts: list[int] | None = None,
+            self,
+            condition_id: str,
+            neg_risk: bool = False,
+            redeem_amounts: list[int] | None = None,
     ):
         if neg_risk:
             if redeem_amounts is None or len(redeem_amounts) != 2:
@@ -133,3 +133,31 @@ class ProxyWeb3Service(BaseWeb3Service):
             max_polls=100,
         )
         return redeem_res
+
+    def redeem_all(self) -> list[dict]:
+        positions = self.fetch_positions(user_address=self._resolve_user_address())
+        if not positions:
+            return []
+        redeem_list = []
+        for pos in positions:
+            condition_id = pos.get("conditionId")
+            try:
+                can_redeem = self.get_redeemable_index_and_balance(condition_id)
+                if not can_redeem:
+                    continue
+                if pos.get("negativeRisk"):
+                    amounts = [0, 0]
+                    amounts[pos.get("outcomeIndex")] = pos.get("size")
+                    int_amounts = [int(amount * 1e6) for amount in amounts]
+                    redeem_res = self.redeem(condition_id=condition_id, redeem_amounts=int_amounts, neg_risk=True)
+                else:
+                    redeem_res = self.redeem(condition_id=condition_id)
+            except Exception as e:
+                print(f"redeem error, {condition_id=}, error={e}")
+            else:
+                redeem_list.append(redeem_res)
+                buy_price = pos.get("avgPrice")
+                size = pos.get("size")
+                volume = 1 / buy_price * (buy_price * size)
+                print(f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc")
+        return redeem_list

@@ -98,12 +98,20 @@ relayer_client = RelayClient(
 )
 
 # Create service instance
-service = PolyWeb3Service(clob_client=client, relayer_client=relayer_client)
+service = PolyWeb3Service(
+    clob_client=client,
+    relayer_client=relayer_client,
+    rpc_url="https://polygon-bor.publicnode.com",  # optional
+)
 
 # Execute redeem operation
 condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
 redeem_result = service.redeem(condition_id=condition_id)
 print(f"Redeem result: {redeem_result}")
+
+# Redeem all positions that are currently redeemable
+redeem_all_result = service.redeem_all()
+print(f"Redeem all result: {redeem_all_result}")
 ```
 
 ### Optional - Query Operations
@@ -187,6 +195,20 @@ result = service.redeem(
     neg_risk=True,
     redeem_amounts=[1000000, 2000000]  # Amounts in smallest unit (6 decimal places)
 )
+```
+
+##### `redeem_all() -> list[dict] | None`
+
+Redeem all positions that are currently redeemable for the authenticated account.
+
+**Returns:**
+- `list[dict] | None`: List of redeem results, or `None` if no redeemable positions
+
+**Examples:**
+
+```python
+# Redeem all positions that can be redeemed
+service.redeem_all()
 ```
 
 ## Project Structure

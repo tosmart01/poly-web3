@@ -101,12 +101,20 @@ relayer_client = RelayClient(
 )
 
 # 创建服务实例
-service = PolyWeb3Service(clob_client=client, relayer_client=relayer_client)
+service = PolyWeb3Service(
+    clob_client=client,
+    relayer_client=relayer_client,
+    rpc_url="https://polygon-bor.publicnode.com",  # 可选
+)
 
 # 执行赎回操作
 condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
 redeem_result = service.redeem(condition_id=condition_id)
 print(f"赎回结果: {redeem_result}")
+
+# 赎回当前账户下所有可赎回仓位
+redeem_all_result = service.redeem_all()
+print(f"全部赎回结果: {redeem_all_result}")
 ```
 
 ### 可选 - 查询操作
@@ -192,6 +200,20 @@ result = service.redeem(
 )
 ```
 
+##### `redeem_all() -> list[dict] | None`
+
+赎回当前账户下所有可赎回仓位。
+
+**返回:**
+- `list[dict] | None`: 赎回结果列表；若无可赎回仓位则返回 `None`
+
+**示例:**
+
+```python
+# 赎回所有可赎回仓位
+service.redeem_all()
+```
+
 ## 项目结构
 
 ```
@@ -254,4 +276,3 @@ PinBar
 
 - [Polymarket](https://polymarket.com/)
 - [Polygon Network](https://polygon.technology/)
-

@@ -12,7 +12,7 @@ GET_TRANSACTION = "/transaction"
 GET_TRANSACTIONS = "/transactions"
 SUBMIT_TRANSACTION = "/submit"
 GET_DEPLOYED = "/deployed"
-RPC_URL = "https://polygon-rpc.com"
+RPC_URL = "https://polygon-bor.publicnode.com" # "https://polygon-rpc.com"
 RELAYER_URL = "https://relayer-v2.polymarket.com"
 
 STATE_NEW = ("STATE_NEW",)
