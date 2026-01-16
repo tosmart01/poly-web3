@@ -22,6 +22,8 @@ from poly_web3.web3_service.base import BaseWeb3Service
 from poly_web3.signature.build import derive_proxy_wallet, create_struct_hash
 from poly_web3.signature.hash_message import hash_message
 from poly_web3.signature import secp256k1
+
+
 class ProxyWeb3Service(BaseWeb3Service):
     def _build_redeem_tx(self, to: str, data: str) -> dict:
         return {
