@@ -137,7 +137,7 @@ service = PolyWeb3Service(
 # 赎回当前账户下所有可赎回仓位
 redeem_all_result = service.redeem_all(batch_size=10)
 print(f"全部赎回结果: {redeem_all_result}")
-# 如果 redeem_all_result 列表中有 None，则表示失败，请根据故障排查文档进行重试
+# 如果 redeem_all_result 列表中有 None，则表示失败，请参考 README FAQ 后重试
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("部分赎回失败，请重试。")
 

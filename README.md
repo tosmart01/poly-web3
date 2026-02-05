@@ -136,7 +136,7 @@ service = PolyWeb3Service(
 # Redeem all positions that are currently redeemable
 redeem_all_result = service.redeem_all(batch_size=10)
 print(f"Redeem all result: {redeem_all_result}")
-# If redeem_all_result contains None, it indicates a failure; retry per Troubleshooting.
+# If redeem_all_result contains None, refer to README FAQ and retry.
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("Redeem failed for some items; please retry.")
 
