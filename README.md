@@ -1,10 +1,15 @@
 # poly-web3
 
+![PyPI](https://img.shields.io/pypi/v/poly-web3)
+![Python](https://img.shields.io/pypi/pyversions/poly-web3)
+![License](https://img.shields.io/github/license/tosmart01/poly-web3)
+
 Python SDK for redeeming Polymarket positions via Proxy/Safe wallets (gas-free).
 
 [English](README.md) | [中文](README.zh.md)
 
 ```bash
+Python >= 3.11
 pip install poly-web3
 ```
 
@@ -17,7 +22,7 @@ service = PolyWeb3Service(
 )
 
 # Redeem all redeemable positions for the current account.
-service.redeem_all(batch_size=20)
+service.redeem_all(batch_size=10)
 ```
 
 [See the full example](#quick-start)
@@ -27,11 +32,13 @@ service.redeem_all(batch_size=20)
 - Redeemable positions are fetched via the official Positions API, which typically has ~1 minute latency.
 - `redeem_all` returns an empty list if there are no redeemable positions. If the returned list contains `None`, the redeem failed and should be retried.
 
-## Troubleshooting
+## FAQ
 
 1. **UI shows redeemable, but `redeem_all` returns `[]`**: The official Positions API can be delayed by 1–3 minutes. Wait a bit and retry.
 2. **RPC error during redeem**: Switch RPC endpoints by setting `rpc_url` when instantiating `PolyWeb3Service`.
 3. **Redeem stuck in `execute`**: The official relayer may be congested. Stop redeeming for 1 hour to avoid nonce looping from repeated submissions.
+4. **Relayer client returns 403**: You need to apply for Builder API access and use a valid key. Reference: Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
+5. **Relayer daily limit**: The official relayer typically limits to 100 requests per day. Prefer batch redeem (`batch_size`) to reduce the number of requests and avoid hitting the limit.
 
 ## About the Project
 
@@ -127,7 +134,7 @@ service = PolyWeb3Service(
 
 
 # Redeem all positions that are currently redeemable
-redeem_all_result = service.redeem_all(batch_size=20)
+redeem_all_result = service.redeem_all(batch_size=10)
 print(f"Redeem all result: {redeem_all_result}")
 # If redeem_all_result contains None, it indicates a failure; retry per Troubleshooting.
 if redeem_all_result and any(item is None for item in redeem_all_result):
@@ -138,7 +145,7 @@ condition_ids = [
     "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
     "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
 ]
-redeem_batch_result = service.redeem(condition_ids, batch_size=20)
+redeem_batch_result = service.redeem(condition_ids, batch_size=10)
 print(f"Redeem batch result: {redeem_batch_result}")
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("Redeem failed for some items; please retry.")
@@ -167,7 +174,7 @@ Execute redeem operation.
 
 ```python
 # Batch redeem
-result = service.redeem(["0x...", "0x..."], batch_size=20)
+result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```
 
 ##### `redeem_all(batch_size: int = 20) -> list[dict]`
@@ -181,7 +188,7 @@ Redeem all positions that are currently redeemable for the authenticated account
 
 ```python
 # Redeem all positions that can be redeemed
-service.redeem_all(batch_size=20)
+service.redeem_all(batch_size=10)
 ```
 
 #### Optional APIs
@@ -276,14 +283,13 @@ python examples/example_redeem.py
 
 ### Contributing
 
-We welcome all forms of contributions! If you'd like to:
+Simple contribution flow:
 
-- Implement EOA wallet support
-- Fix bugs or improve existing functionality
-- Add new features or improve documentation
-- Make suggestions or report issues
-
-Please feel free to submit an Issue or Pull Request. Your contributions will help make this project better!
+1. Open an Issue to describe the change (bug/feature/doc).
+2. Fork and create a branch: `feat/xxx` or `fix/xxx`.
+3. Make changes and update/add docs if needed.
+4. Run: `uv run python -m examples.example_redeem` (if applicable).
+5. Open a Pull Request and link the Issue.
 
 ## License
 

@@ -1,10 +1,15 @@
 # poly-web3
 
+![PyPI](https://img.shields.io/pypi/v/poly-web3)
+![Python](https://img.shields.io/pypi/pyversions/poly-web3)
+![License](https://img.shields.io/github/license/tosmart01/poly-web3)
+
 Polymarket Proxy 与 Safe 钱包赎回操作的 Python SDK，免 gas 费。
 
 [English](README.md) | 中文
 
 ```bash
+Python >= 3.11
 pip install poly-web3
 ```
 
@@ -17,7 +22,7 @@ service = PolyWeb3Service(
 )
 
 # 赎回当前账户下所有可赎回仓位
-service.redeem_all(batch_size=20)
+service.redeem_all(batch_size=10)
 ```
 
 [查看完整示例](#快速开始)
@@ -27,11 +32,13 @@ service.redeem_all(batch_size=20)
 - 可赎回仓位通过官方 Positions API 查询，通常有约 1 分钟延迟。
 - `redeem_all` 若无可赎回仓位则返回空数组；若返回数组中包含 `None`，表示赎回失败，需要重试。
 
-## 常见故障排查
+## FAQ
 
 1. **页面显示可赎回，但 `redeem_all` 返回 `[]`**：官方 Positions API 可能有 1-3 分钟延迟，稍等后重试。
 2. **赎回时出现 RPC 报错**：请更换 RPC 节点，在 `PolyWeb3Service` 实例化时设置 `rpc_url`。
 3. **赎回状态一直是 `execute`**：官方 relayer 可能拥堵，暂停赎回 1 小时，避免连续提交导致 nonce 循环问题。
+4. **Relayer client 返回 403**：需要按官方文档申请 Builder key。Reference / 参考链接：Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
+5. **Relayer 每日限额**：官方 relayer 通常每日限制 100 次请求，推荐使用批量赎回（`batch_size`）以减少请求次数，避免超额。
 
 ## 关于项目
 
@@ -128,7 +135,7 @@ service = PolyWeb3Service(
 )
 
 # 赎回当前账户下所有可赎回仓位
-redeem_all_result = service.redeem_all(batch_size=20)
+redeem_all_result = service.redeem_all(batch_size=10)
 print(f"全部赎回结果: {redeem_all_result}")
 # 如果 redeem_all_result 列表中有 None，则表示失败，请根据故障排查文档进行重试
 if redeem_all_result and any(item is None for item in redeem_all_result):
@@ -139,7 +146,7 @@ condition_ids = [
     "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
     "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
 ]
-redeem_batch_result = service.redeem(condition_ids, batch_size=20)
+redeem_batch_result = service.redeem(condition_ids, batch_size=10)
 print(f"批量赎回结果: {redeem_batch_result}")
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("部分赎回失败，请重试。")
@@ -171,7 +178,7 @@ if redeem_all_result and any(item is None for item in redeem_all_result):
 result = service.redeem("0x...")
 
 # 批量赎回
-result = service.redeem(["0x...", "0x..."], batch_size=20)
+result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```
 
 ##### `redeem_all(batch_size: int = 20) -> list[dict]`
@@ -185,7 +192,7 @@ result = service.redeem(["0x...", "0x..."], batch_size=20)
 
 ```python
 # 赎回所有可赎回仓位
-service.redeem_all(batch_size=20)
+service.redeem_all(batch_size=10)
 ```
 
 #### 可选 API
@@ -280,14 +287,13 @@ python examples/example_redeem.py
 
 ### 贡献
 
-我们欢迎所有形式的贡献！如果您想：
+最简单的贡献流程：
 
-- 实现 EOA 钱包支持
-- 修复 bug 或改进现有功能
-- 添加新功能或改进文档
-- 提出建议或报告问题
-
-请随时提交 Issue 或 Pull Request。您的贡献将帮助这个项目变得更好！
+1. 先提 Issue 说明问题或需求。
+2. Fork 并新建分支：`feat/xxx` 或 `fix/xxx`。
+3. 完成修改，必要时同步更新文档。
+4. 运行：`uv run python -m examples.example_redeem`（如果适用）。
+5. 提交 PR 并关联对应 Issue。
 
 ## 许可证
 
