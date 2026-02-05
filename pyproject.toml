@@ -1,13 +1,13 @@
 [project]
 name = "poly-web3"
-version = "1.0.0"
+version = "1.0.1"
 description = "Polymarket Proxy wallet redeem SDK - Execute redeem operations on Polymarket using proxy wallets"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "py-clob-client>=0.25.0",
     "py-builder-relayer-client>=0.0.1",
-    "web3==6.8",
+    "web3>=7.0.0,<8",
     "eth-utils==5.3.1",
     "setuptools>=80.9.0",
 ]

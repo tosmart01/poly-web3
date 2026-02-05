@@ -6,8 +6,7 @@
 # @Software: PyCharm
 import requests
 
-from web3 import Web3
-from eth_utils import to_bytes
+from eth_utils import to_bytes, to_checksum_address
 
 from poly_web3.const import (
     proxy_wallet_factory_abi,
@@ -94,15 +93,13 @@ class ProxyWeb3Service(BaseWeb3Service):
         # Create the contract object
         contract = self.w3.eth.contract(abi=proxy_wallet_factory_abi)
 
-        # Encode function data
-        function_data = contract.encodeABI(fn_name="proxy", args=[calls_data])
-
-        return function_data
+        # Encode function data (compatible with web3 6/7)
+        return contract.functions.proxy(calls_data)._encode_transaction_data()
 
     def _submit_redeem(self, txs: list[dict]) -> dict:
         if self.clob_client is None:
             raise Exception("signer not found")
-        _from = Web3.to_checksum_address(self.clob_client.get_address())
+        _from = to_checksum_address(self.clob_client.get_address())
         rp = self._get_relay_payload(_from, self.wallet_type)
         args = {
             "from": _from,

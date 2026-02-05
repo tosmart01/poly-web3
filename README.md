@@ -73,7 +73,7 @@ uv add poly-web3
 
 - `py-clob-client >= 0.25.0` - Polymarket CLOB client
 - `py-builder-relayer-client >= 0.0.1` - Builder Relayer client
-- `web3 == 6.8` - Web3.py library
+- `web3 >= 7.0.0` - Web3.py library
 - `eth-utils == 5.3.1` - Ethereum utilities library
 
 ## Quick Start

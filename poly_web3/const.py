@@ -4,7 +4,7 @@
 # @Site:
 # @File: const.py
 # @Software: PyCharm
-from web3 import Web3
+from eth_utils import to_checksum_address
 
 GET_NONCE = "/nonce"
 GET_RELAY_PAYLOAD = "/relay-payload"
@@ -23,13 +23,13 @@ STATE_CONFIRMED = "STATE_CONFIRMED"
 STATE_FAILED = "STATE_FAILED"
 
 # address
-CTF_ADDRESS = Web3.to_checksum_address("0x4d97dcd97ec945f40cf65f87097ace5ea0476045")
-USDC_POLYGON = Web3.to_checksum_address("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
-NEG_RISK_ADAPTER_ADDRESS = Web3.to_checksum_address(
+CTF_ADDRESS = to_checksum_address("0x4d97dcd97ec945f40cf65f87097ace5ea0476045")
+USDC_POLYGON = to_checksum_address("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
+NEG_RISK_ADAPTER_ADDRESS = to_checksum_address(
     "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
 )
 ZERO_BYTES32 = "0x" + "00" * 32
-proxy_factory_address = Web3.to_checksum_address(
+proxy_factory_address = to_checksum_address(
     "0xaB45c5A4B0c941a2F231C04C3f49182e1A254052"
 )
 SAFE_INIT_CODE_HASH = (

@@ -46,6 +46,11 @@ if __name__ == "__main__":
         relayer_client=relayer_client,
         rpc_url="https://polygon-bor.publicnode.com",
     )
+
+    # Redeem all positions that are currently redeemable (returns list or None)
+    redeem_all = service.redeem_all(batch_size=10)
+    print(redeem_all)
+
     # Redeem in batch
     condition_ids = [
         "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
@@ -53,13 +58,10 @@ if __name__ == "__main__":
     redeem_batch = service.redeem(condition_ids, batch_size=10)
     print(redeem_batch)
 
-    # Redeem all positions that are currently redeemable (returns list or None)
-    redeem_all = service.redeem_all(batch_size=10)
-    print(redeem_all)
 
     # Optional - Query operations (可选操作，用于查询)
     # can_redeem = service.is_condition_resolved(condition_id)
     # redeem_balance = service.get_redeemable_index_and_balance(
-    #     condition_id, owner=client.builder.funder
+    #     condition_id
     # )
     # print(can_redeem, redeem_balance)

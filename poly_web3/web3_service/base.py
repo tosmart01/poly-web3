@@ -8,6 +8,7 @@ from typing import Any
 
 from py_builder_relayer_client.client import RelayClient
 from py_clob_client.client import ClobClient
+from eth_utils import to_checksum_address
 from web3 import Web3
 import requests
 
@@ -132,7 +133,7 @@ class BaseWeb3Service:
         if not winners:
             return []
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_PAYOUT)
-        owner_checksum = Web3.to_checksum_address(owner)
+        owner_checksum = to_checksum_address(owner)
         redeemable: list[tuple] = []
         for index in winners:
             index_set = 1 << index
@@ -149,7 +150,6 @@ class BaseWeb3Service:
 
     def build_ctf_redeem_tx_data(self, condition_id: str) -> str:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_REDEEM)
-        # 只需要 calldata：encodeABI 即可
         return ctf.functions.redeemPositions(
             USDC_POLYGON,
             ZERO_BYTES32,
@@ -264,7 +264,7 @@ class BaseWeb3Service:
                     )
             except Exception as e:
                 error_list.extend(batch)
-                logger.info(f"redeem batch error, {batch=}, error={e}")
+                logger.error(f"redeem batch error, {batch=}, error={e}")
         if error_list:
             logger.warning(f"error redeem condition list, {error_list}")
         return redeem_list
