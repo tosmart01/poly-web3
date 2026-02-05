@@ -20,10 +20,18 @@ service = PolyWeb3Service(
 service.redeem_all(batch_size=20)
 ```
 
+[查看完整示例](#快速开始)
+
 ## 赎回说明
 
 - 可赎回仓位通过官方 Positions API 查询，通常有约 1 分钟延迟。
 - `redeem_all` 若无可赎回仓位则返回空数组；若返回数组中包含 `None`，表示赎回失败，需要重试。
+
+## 常见故障排查
+
+1. **页面显示可赎回，但 `redeem_all` 返回 `[]`**：官方 Positions API 可能有 1-3 分钟延迟，稍等后重试。
+2. **赎回时出现 RPC 报错**：请更换 RPC 节点，在 `PolyWeb3Service` 实例化时设置 `rpc_url`。
+3. **赎回状态一直是 `execute`**：官方 relayer 可能拥堵，暂停赎回 1 小时，避免连续提交导致 nonce 循环问题。
 
 ## 关于项目
 

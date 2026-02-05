@@ -20,10 +20,18 @@ service = PolyWeb3Service(
 service.redeem_all(batch_size=20)
 ```
 
+[See the full example](#quick-start)
+
 ## Redeem Behavior Notes
 
 - Redeemable positions are fetched via the official Positions API, which typically has ~1 minute latency.
 - `redeem_all` returns an empty list if there are no redeemable positions. If the returned list contains `None`, the redeem failed and should be retried.
+
+## Troubleshooting
+
+1. **UI shows redeemable, but `redeem_all` returns `[]`**: The official Positions API can be delayed by 1–3 minutes. Wait a bit and retry.
+2. **RPC error during redeem**: Switch RPC endpoints by setting `rpc_url` when instantiating `PolyWeb3Service`.
+3. **Redeem stuck in `execute`**: The official relayer may be congested. Stop redeeming for 1 hour to avoid nonce looping from repeated submissions.
 
 ## About the Project
 
