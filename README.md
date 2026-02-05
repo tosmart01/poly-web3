@@ -126,6 +126,13 @@ service = PolyWeb3Service(
 )
 
 
+# Redeem all positions that are currently redeemable
+redeem_all_result = service.redeem_all(batch_size=20)
+print(f"Redeem all result: {redeem_all_result}")
+# If redeem_all_result contains None, it indicates a failure; retry per Troubleshooting.
+if redeem_all_result and any(item is None for item in redeem_all_result):
+    print("Redeem failed for some items; please retry.")
+
 # Execute redeem operation (batch)
 condition_ids = [
     "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
@@ -133,10 +140,6 @@ condition_ids = [
 ]
 redeem_batch_result = service.redeem(condition_ids, batch_size=20)
 print(f"Redeem batch result: {redeem_batch_result}")
-
-# Redeem all positions that are currently redeemable
-redeem_all_result = service.redeem_all(batch_size=20)
-print(f"Redeem all result: {redeem_all_result}")
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("Redeem failed for some items; please retry.")
 ```

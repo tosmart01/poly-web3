@@ -127,6 +127,13 @@ service = PolyWeb3Service(
     rpc_url="https://polygon-bor.publicnode.com",  # 可选
 )
 
+# 赎回当前账户下所有可赎回仓位
+redeem_all_result = service.redeem_all(batch_size=20)
+print(f"全部赎回结果: {redeem_all_result}")
+# 如果 redeem_all_result 列表中有 None，则表示失败，请根据故障排查文档进行重试
+if redeem_all_result and any(item is None for item in redeem_all_result):
+    print("部分赎回失败，请重试。")
+
 # 执行赎回操作（批量）
 condition_ids = [
     "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
@@ -134,10 +141,6 @@ condition_ids = [
 ]
 redeem_batch_result = service.redeem(condition_ids, batch_size=20)
 print(f"批量赎回结果: {redeem_batch_result}")
-
-# 赎回当前账户下所有可赎回仓位
-redeem_all_result = service.redeem_all(batch_size=20)
-print(f"全部赎回结果: {redeem_all_result}")
 if redeem_all_result and any(item is None for item in redeem_all_result):
     print("部分赎回失败，请重试。")
 ```
