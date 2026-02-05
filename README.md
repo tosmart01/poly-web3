@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/pypi/pyversions/poly-web3)
 ![License](https://img.shields.io/github/license/tosmart01/poly-web3)
 
-Python SDK for redeeming Polymarket positions via Proxy/Safe wallets (gas-free).
+Python SDK for redeeming and splitting/merging Polymarket positions via Proxy/Safe wallets (gas-free).
 
 [English](README.md) | [中文](README.zh.md)
 
@@ -23,6 +23,10 @@ service = PolyWeb3Service(
 
 # Redeem all redeemable positions for the current account.
 service.redeem_all(batch_size=10)
+
+# Split/Merge for binary markets (amount in human USDC units).
+service.split("0x...", 10)
+service.merge("0x...", 10)
 ```
 
 [See the full example](#quick-start)
@@ -31,6 +35,11 @@ service.redeem_all(batch_size=10)
 
 - Redeemable positions are fetched via the official Positions API, which typically has ~1 minute latency.
 - `redeem_all` returns an empty list if there are no redeemable positions. If the returned list contains `None`, the redeem failed and should be retried.
+
+## Split/Merge Notes
+
+- `split`/`merge` are designed for binary markets (Yes/No) and use the default partition internally.
+- `amount` is in human units (USDC), and is converted to base units internally.
 
 ## FAQ
 
@@ -45,7 +54,7 @@ service.redeem_all(batch_size=10)
 This project is a Python rewrite of Polymarket's official TypeScript implementation of `builder-relayer-client`, designed to provide Python developers with a convenient tool for executing Proxy and Safe wallet redeem operations on Polymarket.
 
 **Important Notes:**
-- This project **only implements the official redeem functionality**, focusing on Conditional Token Fund (CTF) redeem operations
+- This project implements official CTF redeem plus binary split/merge operations
 - Other features (such as trading, order placement, etc.) are not within the scope of this project
 
 **Some Polymarket-related redeem or write operations implemented in this project depend on access granted through Polymarket's Builder program. To perform real redeem operations against Polymarket, you must apply for and obtain a Builder key/credentials via Polymarket's official Builder application process. After approval you will receive the credentials required to use the Builder API—only then will the redeem flows in this repository work against the live service. For local development or automated tests, use mocks or testnet setups instead of real keys to avoid exposing production credentials.**
@@ -54,8 +63,8 @@ Reference：
 - Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
 
 **Current Status:**
-- ✅ **Proxy Wallet** - Fully supported for redeem functionality
-- ✅ **Safe Wallet** - Fully supported for redeem functionality
+- ✅ **Proxy Wallet** - Fully supported for redeem/split/merge
+- ✅ **Safe Wallet** - Fully supported for redeem/split/merge
 - 🚧 **EOA Wallet** - Under development
 
 We welcome community contributions! If you'd like to help implement EOA wallet redeem functionality, or have other improvement suggestions, please feel free to submit a Pull Request.
@@ -151,6 +160,23 @@ if redeem_all_result and any(item is None for item in redeem_all_result):
     print("Redeem failed for some items; please retry.")
 ```
 
+### Basic Usage - Split/Merge (Binary Markets)
+
+```python
+# amount is in human units (USDC)
+split_result = service.split(
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+    1.5,
+)
+print(f"Split result: {split_result}")
+
+merge_result = service.merge(
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+    1.5,
+)
+print(f"Merge result: {merge_result}")
+```
+
 ## API Documentation
 
 ### PolyWeb3Service
@@ -189,6 +215,40 @@ Redeem all positions that are currently redeemable for the authenticated account
 ```python
 # Redeem all positions that can be redeemed
 service.redeem_all(batch_size=10)
+```
+
+##### `split(condition_id: str, amount: int | float | str)`
+
+Split a binary (Yes/No) position. `amount` is in human USDC units.
+
+**Parameters:**
+- `condition_id` (str): Condition ID
+- `amount` (int | float | str): Amount in USDC
+
+**Returns:**
+- `dict | None`: Transaction result
+
+**Examples:**
+
+```python
+result = service.split("0x...", 1.25)
+```
+
+##### `merge(condition_id: str, amount: int | float | str)`
+
+Merge a binary (Yes/No) position. `amount` is in human USDC units.
+
+**Parameters:**
+- `condition_id` (str): Condition ID
+- `amount` (int | float | str): Amount in USDC
+
+**Returns:**
+- `dict | None`: Transaction result
+
+**Examples:**
+
+```python
+result = service.merge("0x...", 1.25)
 ```
 
 #### Optional APIs
@@ -264,7 +324,7 @@ poly_web3/
 
 1. **Environment Variable Security**: Make sure `.env` file is added to `.gitignore`, do not commit sensitive information to the code repository
 2. **Network Support**: Currently mainly supports Polygon mainnet (chain_id: 137), Amoy testnet may have limited functionality
-3. **Wallet Type**: Proxy (signature_type: 1) and Safe (signature_type: 2) are supported; EOA wallet redeem functionality is under development
+3. **Wallet Type**: Proxy (signature_type: 1) and Safe (signature_type: 2) are supported; EOA wallet operations are under development
 4. **Gas Fees**: Transactions are executed through Relayer, gas fees are handled by the Relayer
 
 ## Development
@@ -279,6 +339,7 @@ uv pip install -e ".[dev]"
 
 ```bash
 python examples/example_redeem.py
+python examples/example_split_merge.py
 ```
 
 ### Contributing
@@ -288,7 +349,7 @@ Simple contribution flow:
 1. Open an Issue to describe the change (bug/feature/doc).
 2. Fork and create a branch: `feat/xxx` or `fix/xxx`.
 3. Make changes and update/add docs if needed.
-4. Run: `uv run python -m examples.example_redeem` (if applicable).
+4. Run: `uv run python -m examples.example_redeem` or `uv run python -m examples.example_split_merge` (if applicable).
 5. Open a Pull Request and link the Issue.
 
 ## License

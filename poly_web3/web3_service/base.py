@@ -5,6 +5,7 @@
 # @File: base.py
 # @Software: PyCharm
 from typing import Any
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 from py_builder_relayer_client.client import RelayClient
 from py_clob_client.client import ClobClient
@@ -19,6 +20,8 @@ from poly_web3.const import (
     ZERO_BYTES32,
     USDC_POLYGON,
     CTF_ABI_REDEEM,
+    CTF_ABI_SPLIT,
+    CTF_ABI_MERGE,
     NEG_RISK_ADAPTER_ADDRESS,
     RELAYER_URL,
     POL,
@@ -157,6 +160,40 @@ class BaseWeb3Service:
             [1, 2],
         )._encode_transaction_data()
 
+    def build_ctf_split_tx_data(
+            self,
+            condition_id: str,
+            partition: list[int],
+            amount: int,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> str:
+        ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_SPLIT)
+        return ctf.functions.splitPosition(
+            collateral_token,
+            parent_collection_id,
+            condition_id,
+            partition,
+            amount,
+        )._encode_transaction_data()
+
+    def build_ctf_merge_tx_data(
+            self,
+            condition_id: str,
+            partition: list[int],
+            amount: int,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> str:
+        ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_MERGE)
+        return ctf.functions.mergePositions(
+            collateral_token,
+            parent_collection_id,
+            condition_id,
+            partition,
+            amount,
+        )._encode_transaction_data()
+
     def build_neg_risk_redeem_tx_data(
             self, condition_id: str, redeem_amounts: list[int]
     ) -> str:
@@ -170,6 +207,9 @@ class BaseWeb3Service:
 
     def _build_redeem_tx(self, to: str, data: str) -> Any:
         raise NotImplementedError("redeem tx builder not implemented")
+
+    def _build_ctf_tx(self, to: str, data: str) -> Any:
+        return self._build_redeem_tx(to, data)
 
     def _build_redeem_txs_from_positions(self, positions: list[dict]) -> list[Any]:
         neg_amounts_by_condition: dict[str, list[float]] = {}
@@ -207,8 +247,11 @@ class BaseWeb3Service:
             )
         return txs
 
+    def _submit_transactions(self, txs: list[Any], metadata: str) -> dict | None:
+        raise NotImplementedError("transaction submit not implemented")
+
     def _submit_redeem(self, txs: list[Any]) -> dict | None:
-        raise NotImplementedError("redeem submit not implemented")
+        return self._submit_transactions(txs, "redeem")
 
     def _redeem_batch(self, condition_ids: list[str], batch_size: int) -> list[dict]:
         """
@@ -312,6 +355,26 @@ class BaseWeb3Service:
             for i in range(0, len(condition_ids), batch_size)
         ]
 
+    @staticmethod
+    def _to_usdc_base_units(amount: int | float | str | Decimal) -> int:
+        try:
+            if isinstance(amount, Decimal):
+                human = amount
+            elif isinstance(amount, int):
+                human = Decimal(amount)
+            else:
+                human = Decimal(str(amount))
+        except (InvalidOperation, ValueError) as exc:
+            raise Exception(f"invalid amount: {amount}") from exc
+        if human <= 0:
+            raise Exception("amount must be greater than 0")
+        base_units = (human * Decimal("1000000")).quantize(
+            Decimal("1"), rounding=ROUND_DOWN
+        )
+        if base_units <= 0:
+            raise Exception("amount too small after conversion")
+        return int(base_units)
+
     def redeem(
             self,
             condition_ids: str | list[str],
@@ -330,3 +393,49 @@ class BaseWeb3Service:
         """
         positions = self.fetch_positions(user_address=self._resolve_user_address())
         return self._redeem_from_positions(positions, batch_size)
+
+    def split(
+            self,
+            condition_id: str,
+            amount: int | float | str | Decimal,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> dict | None:
+        """
+        Split a position for binary markets (Yes/No), amount in human units.
+        """
+        amount_base_units = self._to_usdc_base_units(amount)
+        tx = self._build_ctf_tx(
+            CTF_ADDRESS,
+            self.build_ctf_split_tx_data(
+                condition_id=condition_id,
+                partition=[1, 2],
+                amount=amount_base_units,
+                collateral_token=collateral_token,
+                parent_collection_id=parent_collection_id,
+            ),
+        )
+        return self._submit_transactions([tx], "split")
+
+    def merge(
+            self,
+            condition_id: str,
+            amount: int | float | str | Decimal,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> dict | None:
+        """
+        Merge binary positions (Yes/No) back into a single position, amount in human units.
+        """
+        amount_base_units = self._to_usdc_base_units(amount)
+        tx = self._build_ctf_tx(
+            CTF_ADDRESS,
+            self.build_ctf_merge_tx_data(
+                condition_id=condition_id,
+                partition=[1, 2],
+                amount=amount_base_units,
+                collateral_token=collateral_token,
+                parent_collection_id=parent_collection_id,
+            ),
+        )
+        return self._submit_transactions([tx], "merge")

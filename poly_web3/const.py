@@ -15,7 +15,7 @@ GET_DEPLOYED = "/deployed"
 RPC_URL = "https://polygon-bor.publicnode.com" # "https://polygon-rpc.com"
 RELAYER_URL = "https://relayer-v2.polymarket.com"
 
-STATE_NEW = ("STATE_NEW",)
+STATE_NEW = "STATE_NEW"
 STATE_EXECUTED = "STATE_EXECUTED"
 STATE_MINED = "STATE_MINED"
 STATE_INVALID = "STATE_INVALID"
@@ -73,6 +73,70 @@ CTF_ABI_REDEEM = [
             {"name": "parentCollectionId", "type": "bytes32"},
             {"name": "conditionId", "type": "bytes32"},
             {"name": "indexSets", "type": "uint256[]"},
+        ],
+        "outputs": [],
+    }
+]
+
+CTF_ABI_SPLIT = [
+    {
+        "name": "splitPosition",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "collateralToken", "type": "address"},
+            {"name": "parentCollectionId", "type": "bytes32"},
+            {"name": "conditionId", "type": "bytes32"},
+            {"name": "partition", "type": "uint256[]"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "outputs": [],
+    }
+]
+
+CTF_ABI_MERGE = [
+    {
+        "name": "mergePositions",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "collateralToken", "type": "address"},
+            {"name": "parentCollectionId", "type": "bytes32"},
+            {"name": "conditionId", "type": "bytes32"},
+            {"name": "partition", "type": "uint256[]"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "outputs": [],
+    }
+]
+
+CTF_ABI_SPLIT = [
+    {
+        "name": "splitPosition",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "collateralToken", "type": "address"},
+            {"name": "parentCollectionId", "type": "bytes32"},
+            {"name": "conditionId", "type": "bytes32"},
+            {"name": "partition", "type": "uint256[]"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "outputs": [],
+    }
+]
+
+CTF_ABI_MERGE = [
+    {
+        "name": "mergePositions",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "collateralToken", "type": "address"},
+            {"name": "parentCollectionId", "type": "bytes32"},
+            {"name": "conditionId", "type": "bytes32"},
+            {"name": "partition", "type": "uint256[]"},
+            {"name": "amount", "type": "uint256"},
         ],
         "outputs": [],
     }

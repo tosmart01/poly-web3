@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/pypi/pyversions/poly-web3)
 ![License](https://img.shields.io/github/license/tosmart01/poly-web3)
 
-Polymarket Proxy 与 Safe 钱包赎回操作的 Python SDK，免 gas 费。
+Polymarket Proxy 与 Safe 钱包赎回与拆分/合并仓位的 Python SDK，免 gas 费。
 
 [English](README.md) | 中文
 
@@ -23,6 +23,10 @@ service = PolyWeb3Service(
 
 # 赎回当前账户下所有可赎回仓位
 service.redeem_all(batch_size=10)
+
+# 二元市场拆分/合并（amount 为 USDC 人类单位）
+service.split("0x...", 10)
+service.merge("0x...", 10)
 ```
 
 [查看完整示例](#快速开始)
@@ -31,6 +35,11 @@ service.redeem_all(batch_size=10)
 
 - 可赎回仓位通过官方 Positions API 查询，通常有约 1 分钟延迟。
 - `redeem_all` 若无可赎回仓位则返回空数组；若返回数组中包含 `None`，表示赎回失败，需要重试。
+
+## 拆分/合并说明
+
+- `split`/`merge` 适用于二元市场（Yes/No），内部使用默认分区。
+- `amount` 为 USDC 人类单位，内部自动转换为最小单位。
 
 ## FAQ
 
@@ -45,7 +54,7 @@ service.redeem_all(batch_size=10)
 本项目是对Polymarket 官方 TypeScript 实现的 `builder-relayer-client` 的 Python 重写版本，旨在为 Python 开发者提供在 Polymarket 上执行 Proxy 与 Safe 钱包赎回操作的便捷工具。
 
 **重要说明：**
-- 本项目**仅实现了官方的 redeem（赎回）功能**，专注于条件代币基金（CTF）的赎回操作
+- 本项目实现了官方的 redeem（赎回）以及二元市场的 split/merge 操作
 - 其他功能（如交易、下单等）不在本项目的实现范围内
 
 
@@ -56,11 +65,11 @@ Reference / 参考链接：
 - Polymarket Builders — Introduction: https://docs.polymarket.com/developers/builders/builder-intro
 
 **当前状态：**
-- ✅ **Proxy 代理钱包** - 已完全支持 redeem 功能， 免gas费
-- ✅ **Safe 钱包** - 已完全支持 redeem 功能
+- ✅ **Proxy 代理钱包** - 已完全支持 redeem/split/merge
+- ✅ **Safe 钱包** - 已完全支持 redeem/split/merge
 - 🚧 **EOA 钱包** - 开发中
 
-我们欢迎社区贡献！如果您想帮助实现 EOA 钱包的 redeem 功能支持，或者有其他改进建议，欢迎提交 Pull Request。
+我们欢迎社区贡献！如果您想帮助实现 EOA 钱包相关功能支持，或者有其他改进建议，欢迎提交 Pull Request。
 
 ## 安装
 
@@ -152,6 +161,23 @@ if redeem_all_result and any(item is None for item in redeem_all_result):
     print("部分赎回失败，请重试。")
 ```
 
+### 基本使用 - 拆分/合并（二元市场）
+
+```python
+# amount 为 USDC 人类单位
+split_result = service.split(
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+    1.5,
+)
+print(f"拆分结果: {split_result}")
+
+merge_result = service.merge(
+    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+    1.5,
+)
+print(f"合并结果: {merge_result}")
+```
+
 ## API 文档
 
 ### PolyWeb3Service
@@ -193,6 +219,40 @@ result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```python
 # 赎回所有可赎回仓位
 service.redeem_all(batch_size=10)
+```
+
+##### `split(condition_id: str, amount: int | float | str)`
+
+拆分二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
+
+**参数:**
+- `condition_id` (str): 条件 ID
+- `amount` (int | float | str): USDC 数量
+
+**返回:**
+- `dict | None`: 交易结果
+
+**示例:**
+
+```python
+result = service.split("0x...", 1.25)
+```
+
+##### `merge(condition_id: str, amount: int | float | str)`
+
+合并二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
+
+**参数:**
+- `condition_id` (str): 条件 ID
+- `amount` (int | float | str): USDC 数量
+
+**返回:**
+- `dict | None`: 交易结果
+
+**示例:**
+
+```python
+result = service.merge("0x...", 1.25)
 ```
 
 #### 可选 API
@@ -268,7 +328,7 @@ poly_web3/
 
 1. **环境变量安全**: 请确保 `.env` 文件已添加到 `.gitignore`，不要将敏感信息提交到代码仓库
 2. **网络支持**: 目前主要支持 Polygon 主网（chain_id: 137），Amoy 测试网部分功能可能受限
-3. **钱包类型**: 已支持 Proxy（signature_type: 1）和 Safe（signature_type: 2），EOA 钱包赎回功能仍在开发中
+3. **钱包类型**: 已支持 Proxy（signature_type: 1）和 Safe（signature_type: 2），EOA 钱包相关功能仍在开发中
 4. **Gas 费用**: 通过 Relayer 执行交易，Gas 费用由 Relayer 处理
 
 ## 开发
@@ -283,6 +343,7 @@ uv pip install -e ".[dev]"
 
 ```bash
 python examples/example_redeem.py
+python examples/example_split_merge.py
 ```
 
 ### 贡献
@@ -292,7 +353,7 @@ python examples/example_redeem.py
 1. 先提 Issue 说明问题或需求。
 2. Fork 并新建分支：`feat/xxx` 或 `fix/xxx`。
 3. 完成修改，必要时同步更新文档。
-4. 运行：`uv run python -m examples.example_redeem`（如果适用）。
+4. 运行：`uv run python -m examples.example_redeem` 或 `uv run python -m examples.example_split_merge`（如果适用）。
 5. 提交 PR 并关联对应 Issue。
 
 ## 许可证

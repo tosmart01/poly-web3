@@ -17,8 +17,13 @@ class SafeWeb3Service(BaseWeb3Service):
             operation=OperationType.Call,
         )
 
-    def _submit_redeem(self, txs: list[SafeTransaction]) -> dict | None:
+    def _submit_transactions(
+            self, txs: list[SafeTransaction], metadata: str
+    ) -> dict | None:
         if self.relayer_client is None:
             raise Exception("relayer_client not found")
-        resp = self.relayer_client.execute(txs, "redeem")
+        resp = self.relayer_client.execute(txs, metadata)
         return resp.wait()
+
+    def _submit_redeem(self, txs: list[SafeTransaction]) -> dict | None:
+        return self._submit_transactions(txs, "redeem")

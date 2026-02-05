@@ -32,7 +32,9 @@ class ProxyWeb3Service(BaseWeb3Service):
             "typeCode": 1,
         }
 
-    def build_proxy_transaction_request(self, args: dict) -> dict:
+    def build_proxy_transaction_request(
+            self, args: dict, metadata: str = "redeem"
+    ) -> dict:
         proxy_contract_config = self.get_contract_config()["ProxyContracts"]
         to = proxy_contract_config["ProxyFactory"]
         proxy = derive_proxy_wallet(args["from"], to, PROXY_INIT_CODE_HASH)
@@ -80,7 +82,7 @@ class ProxyWeb3Service(BaseWeb3Service):
             "signature": final_sig,
             "signatureParams": sig_params,
             "type": self.wallet_type.value,
-            "metadata": "redeem",
+            "metadata": metadata,
         }
         return req
 
@@ -96,7 +98,7 @@ class ProxyWeb3Service(BaseWeb3Service):
         # Encode function data (compatible with web3 6/7)
         return contract.functions.proxy(calls_data)._encode_transaction_data()
 
-    def _submit_redeem(self, txs: list[dict]) -> dict:
+    def _submit_transactions(self, txs: list[dict], metadata: str) -> dict:
         if self.clob_client is None:
             raise Exception("signer not found")
         _from = to_checksum_address(self.clob_client.get_address())
@@ -108,7 +110,7 @@ class ProxyWeb3Service(BaseWeb3Service):
             "relay": rp["address"],
             "nonce": rp["nonce"],
         }
-        req = self.build_proxy_transaction_request(args)
+        req = self.build_proxy_transaction_request(args, metadata=metadata)
         headers = self.relayer_client._generate_builder_headers(
             "POST", SUBMIT_TRANSACTION, req
         )
@@ -122,3 +124,6 @@ class ProxyWeb3Service(BaseWeb3Service):
             max_polls=100,
         )
         return redeem_res
+
+    def _submit_redeem(self, txs: list[dict]) -> dict:
+        return self._submit_transactions(txs, "redeem")
