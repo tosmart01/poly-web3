@@ -1,8 +1,29 @@
 # poly-web3
 
-Python SDK for Polymarket Proxy and Safe wallet redeem operations. Supports executing Conditional Token Fund (CTF) redeem operations on Polymarket through Proxy/Safe wallets, free gas.
+Python SDK for redeeming Polymarket positions via Proxy/Safe wallets (gas-free).
 
 [English](README.md) | [中文](README.zh.md)
+
+```bash
+pip install poly-web3
+```
+
+```python
+from poly_web3 import PolyWeb3Service
+
+service = PolyWeb3Service(
+    clob_client=client,
+    relayer_client=relayer_client,
+)
+
+# Redeem all redeemable positions for the current account.
+service.redeem_all(batch_size=20)
+```
+
+## Redeem Behavior Notes
+
+- Redeemable positions are fetched via the official Positions API, which typically has ~1 minute latency.
+- `redeem_all` returns an empty list if there are no redeemable positions. If the returned list contains `None`, the redeem failed and should be retried.
 
 ## About the Project
 
@@ -23,14 +44,6 @@ Reference：
 - 🚧 **EOA Wallet** - Under development
 
 We welcome community contributions! If you'd like to help implement EOA wallet redeem functionality, or have other improvement suggestions, please feel free to submit a Pull Request.
-
-## Features
-
-- ✅ Support for Polymarket Proxy and Safe wallet redeem operations
-- ✅ Check if conditions are resolved
-- ✅ Get redeemable indexes and balances
-- ✅ Support for standard CTF redeem and negative risk (neg_risk) redeem
-- ✅ Automatic transaction execution through Relayer service
 
 ## Installation
 
@@ -116,24 +129,8 @@ print(f"Redeem batch result: {redeem_batch_result}")
 # Redeem all positions that are currently redeemable
 redeem_all_result = service.redeem_all(batch_size=20)
 print(f"Redeem all result: {redeem_all_result}")
-```
-
-### Optional - Query Operations
-
-Before executing redeem, you can optionally check the condition status and query redeemable balances:
-
-```python
-# Check if condition is resolved
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-can_redeem = service.is_condition_resolved(condition_id)
-
-# Get redeemable indexes and balances
-redeem_balance = service.get_redeemable_index_and_balance(
-    condition_id, owner=client.builder.funder
-)
-
-print(f"Can redeem: {can_redeem}")
-print(f"Redeemable balance: {redeem_balance}")
+if redeem_all_result and any(item is None for item in redeem_all_result):
+    print("Redeem failed for some items; please retry.")
 ```
 
 ## API Documentation
@@ -143,6 +140,40 @@ print(f"Redeemable balance: {redeem_balance}")
 The main service class that automatically selects the appropriate service implementation based on wallet type.
 
 #### Methods
+
+##### `redeem(condition_ids: list[str], batch_size: int = 20)`
+
+Execute redeem operation.
+
+**Parameters:**
+- `condition_ids` (list[str]): List of condition IDs
+- `batch_size` (int): Batch size for redeem requests
+
+**Returns:**
+- `dict | list[dict]`: Transaction result(s) containing transaction status and related information
+
+**Examples:**
+
+```python
+# Batch redeem
+result = service.redeem(["0x...", "0x..."], batch_size=20)
+```
+
+##### `redeem_all(batch_size: int = 20) -> list[dict]`
+
+Redeem all positions that are currently redeemable for the authenticated account.
+
+**Returns:**
+- `list[dict]`: List of redeem results; empty list if no redeemable positions. If the list contains `None`, the redeem failed and should be retried.
+
+**Examples:**
+
+```python
+# Redeem all positions that can be redeemed
+service.redeem_all(batch_size=20)
+```
+
+#### Optional APIs
 
 ##### `is_condition_resolved(condition_id: str) -> bool`
 
@@ -175,36 +206,22 @@ Get redeemable indexes and balances for the specified address.
 **Returns:**
 - `list[tuple]`: List of tuples containing (index, balance), balance is in USDC units
 
-##### `redeem(condition_ids: list[str], batch_size: int = 20)`
+## Optional: Query Operations
 
-Execute redeem operation.
-
-**Parameters:**
-- `condition_ids` (list[str]): List of condition IDs
-- `batch_size` (int): Batch size for redeem requests
-
-**Returns:**
-- `dict | list[dict]`: Transaction result(s) containing transaction status and related information
-
-**Examples:**
+Before executing redeem, you can optionally check the condition status and query redeemable balances:
 
 ```python
-# Batch redeem
-result = service.redeem(["0x...", "0x..."], batch_size=20)
-```
+# Check if condition is resolved
+condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
+can_redeem = service.is_condition_resolved(condition_id)
 
-##### `redeem_all(batch_size: int = 20) -> list[dict] | None`
+# Get redeemable indexes and balances
+redeem_balance = service.get_redeemable_index_and_balance(
+    condition_id, owner=client.builder.funder
+)
 
-Redeem all positions that are currently redeemable for the authenticated account.
-
-**Returns:**
-- `list[dict] | None`: List of redeem results, or `None` if no redeemable positions
-
-**Examples:**
-
-```python
-# Redeem all positions that can be redeemed
-service.redeem_all(batch_size=20)
+print(f"Can redeem: {can_redeem}")
+print(f"Redeemable balance: {redeem_balance}")
 ```
 
 ## Project Structure

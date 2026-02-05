@@ -1,8 +1,29 @@
 # poly-web3
 
-Polymarket Proxy 与 Safe 钱包赎回操作的 Python SDK。支持通过 Proxy/Safe 钱包在 Polymarket 上执行（CTF）的赎回操作，免gas费。
+Polymarket Proxy 与 Safe 钱包赎回操作的 Python SDK，免 gas 费。
 
 [English](README.md) | 中文
+
+```bash
+pip install poly-web3
+```
+
+```python
+from poly_web3 import PolyWeb3Service
+
+service = PolyWeb3Service(
+    clob_client=client,
+    relayer_client=relayer_client,
+)
+
+# 赎回当前账户下所有可赎回仓位
+service.redeem_all(batch_size=20)
+```
+
+## 赎回说明
+
+- 可赎回仓位通过官方 Positions API 查询，通常有约 1 分钟延迟。
+- `redeem_all` 若无可赎回仓位则返回空数组；若返回数组中包含 `None`，表示赎回失败，需要重试。
 
 ## 关于项目
 
@@ -25,15 +46,6 @@ Reference / 参考链接：
 - 🚧 **EOA 钱包** - 开发中
 
 我们欢迎社区贡献！如果您想帮助实现 EOA 钱包的 redeem 功能支持，或者有其他改进建议，欢迎提交 Pull Request。
-
-## 功能特性
-
-- ✅ 支持 Polymarket Proxy 与 Safe 钱包赎回操作
-- ✅ 检查条件是否已解决（resolved）
-- ✅ 获取可赎回的索引和余额
-- ✅ 支持标准 CTF 赎回和负风险（neg_risk）赎回
-- ✅ 自动通过 Relayer 服务执行交易
-
 
 ## 安装
 
@@ -118,24 +130,8 @@ print(f"批量赎回结果: {redeem_batch_result}")
 # 赎回当前账户下所有可赎回仓位
 redeem_all_result = service.redeem_all(batch_size=20)
 print(f"全部赎回结果: {redeem_all_result}")
-```
-
-### 可选 - 查询操作
-
-在执行赎回之前，您可以选择性地检查条件状态和查询可赎回余额：
-
-```python
-# 检查条件是否已解决
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-can_redeem = service.is_condition_resolved(condition_id)
-
-# 获取可赎回的索引和余额
-redeem_balance = service.get_redeemable_index_and_balance(
-    condition_id, owner=client.builder.funder
-)
-
-print(f"可赎回: {can_redeem}")
-print(f"可赎回余额: {redeem_balance}")
+if redeem_all_result and any(item is None for item in redeem_all_result):
+    print("部分赎回失败，请重试。")
 ```
 
 ## API 文档
@@ -145,6 +141,43 @@ print(f"可赎回余额: {redeem_balance}")
 主要的服务类，根据钱包类型自动选择合适的服务实现。
 
 #### 方法
+
+##### `redeem(condition_ids: str | list[str], batch_size: int = 20)`
+
+执行赎回操作。
+
+**参数:**
+- `condition_ids` (str | list[str]): 条件 ID 或条件 ID 列表
+- `batch_size` (int): 每批次处理数量
+
+**返回:**
+- `dict | list[dict]`: 交易结果，包含交易状态和相关信息
+
+**示例:**
+
+```python
+# 单笔赎回
+result = service.redeem("0x...")
+
+# 批量赎回
+result = service.redeem(["0x...", "0x..."], batch_size=20)
+```
+
+##### `redeem_all(batch_size: int = 20) -> list[dict]`
+
+赎回当前账户下所有可赎回仓位。
+
+**返回:**
+- `list[dict]`: 赎回结果列表；若无可赎回仓位则返回空数组；若数组中包含 `None`，表示赎回失败，需要重试
+
+**示例:**
+
+```python
+# 赎回所有可赎回仓位
+service.redeem_all(batch_size=20)
+```
+
+#### 可选 API
 
 ##### `is_condition_resolved(condition_id: str) -> bool`
 
@@ -177,39 +210,22 @@ print(f"可赎回余额: {redeem_balance}")
 **返回:**
 - `list[tuple]`: 包含 (index, balance) 元组的列表，余额单位为 USDC
 
-##### `redeem(condition_ids: str | list[str], batch_size: int = 20)`
+## 可选：查询操作
 
-执行赎回操作。
-
-**参数:**
-- `condition_ids` (str | list[str]): 条件 ID 或条件 ID 列表
-- `batch_size` (int): 每批次处理数量
-
-**返回:**
-- `dict | list[dict]`: 交易结果，包含交易状态和相关信息
-
-**示例:**
+在执行赎回之前，您可以选择性地检查条件状态和查询可赎回余额：
 
 ```python
-# 单笔赎回
-result = service.redeem("0x...")
+# 检查条件是否已解决
+condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
+can_redeem = service.is_condition_resolved(condition_id)
 
-# 批量赎回
-result = service.redeem(["0x...", "0x..."], batch_size=20)
-```
+# 获取可赎回的索引和余额
+redeem_balance = service.get_redeemable_index_and_balance(
+    condition_id, owner=client.builder.funder
+)
 
-##### `redeem_all(batch_size: int = 20) -> list[dict] | None`
-
-赎回当前账户下所有可赎回仓位。
-
-**返回:**
-- `list[dict] | None`: 赎回结果列表；若无可赎回仓位则返回 `None`
-
-**示例:**
-
-```python
-# 赎回所有可赎回仓位
-service.redeem_all(batch_size=20)
+print(f"可赎回: {can_redeem}")
+print(f"可赎回余额: {redeem_balance}")
 ```
 
 ## 项目结构
