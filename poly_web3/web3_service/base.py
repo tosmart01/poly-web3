@@ -28,7 +28,10 @@ from poly_web3.const import (
     POL,
     AMOY,
     GET_RELAY_PAYLOAD,
+    GAMMA_MARKETS_URL,
     NEG_RISK_ADAPTER_ABI_REDEEM,
+    NEG_RISK_ADAPTER_ABI_SPLIT,
+    NEG_RISK_ADAPTER_ABI_MERGE,
 )
 from poly_web3.schema import WalletType
 from poly_web3.log import logger
@@ -198,6 +201,44 @@ class BaseWeb3Service:
             amount,
         )._encode_transaction_data()
 
+    def build_neg_risk_split_tx_data(
+            self,
+            condition_id: str,
+            partition: list[int],
+            amount: int,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> str:
+        nr_adapter = self.w3.eth.contract(
+            address=NEG_RISK_ADAPTER_ADDRESS, abi=NEG_RISK_ADAPTER_ABI_SPLIT
+        )
+        return nr_adapter.functions.splitPosition(
+            collateral_token,
+            parent_collection_id,
+            condition_id,
+            partition,
+            amount,
+        )._encode_transaction_data()
+
+    def build_neg_risk_merge_tx_data(
+            self,
+            condition_id: str,
+            partition: list[int],
+            amount: int,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> str:
+        nr_adapter = self.w3.eth.contract(
+            address=NEG_RISK_ADAPTER_ADDRESS, abi=NEG_RISK_ADAPTER_ABI_MERGE
+        )
+        return nr_adapter.functions.mergePositions(
+            collateral_token,
+            parent_collection_id,
+            condition_id,
+            partition,
+            amount,
+        )._encode_transaction_data()
+
     def build_neg_risk_redeem_tx_data(
             self, condition_id: str, redeem_amounts: list[int]
     ) -> str:
@@ -208,6 +249,39 @@ class BaseWeb3Service:
             condition_id,
             redeem_amounts,
         )._encode_transaction_data()
+
+    @classmethod
+    def get_market_by_condition_id(cls, condition_id: str) -> dict | None:
+        if not condition_id:
+            return None
+        try:
+            response = requests.get(
+                GAMMA_MARKETS_URL,
+                params={"condition_ids": condition_id, "limit": 1},
+                timeout=10,
+            )
+            response.raise_for_status()
+            markets = response.json()
+            if isinstance(markets, list) and markets:
+                return markets[0]
+        except Exception as exc:
+            logger.warning(
+                f"failed to fetch market metadata for condition_id={condition_id}: {exc}"
+            )
+        return None
+
+    @classmethod
+    def is_negative_risk_condition(cls, condition_id: str) -> bool:
+        market = cls.get_market_by_condition_id(condition_id)
+        return bool(market and market.get("negRisk"))
+
+    @classmethod
+    def _resolve_negative_risk_flag(
+            cls, condition_id: str, negative_risk: bool | None
+    ) -> bool:
+        if negative_risk is not None:
+            return negative_risk
+        return cls.is_negative_risk_condition(condition_id)
 
     def _build_redeem_tx(self, to: str, data: str) -> Any:
         raise NotImplementedError("redeem tx builder not implemented")
@@ -439,20 +513,37 @@ class BaseWeb3Service:
             amount: int | float | str | Decimal,
             collateral_token: str = USDC_POLYGON,
             parent_collection_id: str = ZERO_BYTES32,
+            negative_risk: bool | None = None,
     ) -> dict | None:
         """
-        Split a position for binary markets (Yes/No), amount in human units.
+        Split a binary market (Yes/No) position, amount in human units.
         """
+        is_negative_risk = self._resolve_negative_risk_flag(
+            condition_id=condition_id,
+            negative_risk=negative_risk,
+        )
         amount_base_units = self._to_usdc_base_units(amount)
-        tx = self._build_ctf_tx(
-            CTF_ADDRESS,
-            self.build_ctf_split_tx_data(
+        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
+        data = (
+            self.build_neg_risk_split_tx_data(
                 condition_id=condition_id,
                 partition=[1, 2],
                 amount=amount_base_units,
                 collateral_token=collateral_token,
                 parent_collection_id=parent_collection_id,
-            ),
+            )
+            if is_negative_risk
+            else self.build_ctf_split_tx_data(
+                condition_id=condition_id,
+                partition=[1, 2],
+                amount=amount_base_units,
+                collateral_token=collateral_token,
+                parent_collection_id=parent_collection_id,
+            )
+        )
+        tx = self._build_ctf_tx(
+            to,
+            data,
         )
         return self._submit_transactions([tx], "split")
 
@@ -462,19 +553,37 @@ class BaseWeb3Service:
             amount: int | float | str | Decimal,
             collateral_token: str = USDC_POLYGON,
             parent_collection_id: str = ZERO_BYTES32,
+            negative_risk: bool | None = None,
     ) -> dict | None:
         """
-        Merge binary positions (Yes/No) back into a single position, amount in human units.
+        Merge binary positions (Yes/No) back into a single position,
+        amount in human units.
         """
+        is_negative_risk = self._resolve_negative_risk_flag(
+            condition_id=condition_id,
+            negative_risk=negative_risk,
+        )
         amount_base_units = self._to_usdc_base_units(amount)
-        tx = self._build_ctf_tx(
-            CTF_ADDRESS,
-            self.build_ctf_merge_tx_data(
+        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
+        data = (
+            self.build_neg_risk_merge_tx_data(
                 condition_id=condition_id,
                 partition=[1, 2],
                 amount=amount_base_units,
                 collateral_token=collateral_token,
                 parent_collection_id=parent_collection_id,
-            ),
+            )
+            if is_negative_risk
+            else self.build_ctf_merge_tx_data(
+                condition_id=condition_id,
+                partition=[1, 2],
+                amount=amount_base_units,
+                collateral_token=collateral_token,
+                parent_collection_id=parent_collection_id,
+            )
+        )
+        tx = self._build_ctf_tx(
+            to,
+            data,
         )
         return self._submit_transactions([tx], "merge")

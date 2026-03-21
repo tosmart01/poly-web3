@@ -41,6 +41,7 @@ service.merge("0x...", 10)
 ## Split/Merge Notes
 
 - `split`/`merge` are designed for binary markets (Yes/No) and use the default partition internally.
+- Negative-risk markets are detected via the official Gamma markets API and are routed to the NegRisk Adapter.
 - `amount` is in human units (USDC), and is converted to base units internally.
 
 ## FAQ
@@ -248,13 +249,14 @@ Redeem all positions that are currently redeemable for the authenticated account
 service.redeem_all(batch_size=10)
 ```
 
-##### `split(condition_id: str, amount: int | float | str)`
+##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 Split a binary (Yes/No) position. `amount` is in human USDC units.
 
 **Parameters:**
 - `condition_id` (str): Condition ID
 - `amount` (int | float | str): Amount in USDC
+- `negative_risk` (bool | None): Optional explicit market-type hint. When `None`, the SDK auto-detects via the official Gamma markets API and routes neg-risk markets to the NegRisk Adapter.
 
 **Returns:**
 - `dict | None`: Transaction result
@@ -265,13 +267,14 @@ Split a binary (Yes/No) position. `amount` is in human USDC units.
 result = service.split("0x...", 1.25)
 ```
 
-##### `merge(condition_id: str, amount: int | float | str)`
+##### `merge(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 Merge a binary (Yes/No) position. `amount` is in human USDC units.
 
 **Parameters:**
 - `condition_id` (str): Condition ID
 - `amount` (int | float | str): Amount in USDC
+- `negative_risk` (bool | None): Optional explicit market-type hint. When `None`, the SDK auto-detects via the official Gamma markets API and routes neg-risk markets to the NegRisk Adapter.
 
 **Returns:**
 - `dict | None`: Transaction result

@@ -14,6 +14,7 @@ SUBMIT_TRANSACTION = "/submit"
 GET_DEPLOYED = "/deployed"
 RPC_URL = "https://polygon-bor.publicnode.com" # "https://polygon-rpc.com"
 RELAYER_URL = "https://relayer-v2.polymarket.com"
+GAMMA_MARKETS_URL = "https://gamma-api.polymarket.com/markets"
 
 STATE_NEW = "STATE_NEW"
 STATE_EXECUTED = "STATE_EXECUTED"
@@ -150,6 +151,38 @@ NEG_RISK_ADAPTER_ABI_REDEEM = [
         "inputs": [
             {"name": "_conditionId", "type": "bytes32"},
             {"name": "_amounts", "type": "uint256[]"},
+        ],
+        "outputs": [],
+    }
+]
+
+NEG_RISK_ADAPTER_ABI_SPLIT = [
+    {
+        "name": "splitPosition",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "_collateralToken", "type": "address"},
+            {"name": "", "type": "bytes32"},
+            {"name": "_conditionId", "type": "bytes32"},
+            {"name": "", "type": "uint256[]"},
+            {"name": "_amount", "type": "uint256"},
+        ],
+        "outputs": [],
+    }
+]
+
+NEG_RISK_ADAPTER_ABI_MERGE = [
+    {
+        "name": "mergePositions",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "_collateralToken", "type": "address"},
+            {"name": "", "type": "bytes32"},
+            {"name": "_conditionId", "type": "bytes32"},
+            {"name": "", "type": "uint256[]"},
+            {"name": "_amount", "type": "uint256"},
         ],
         "outputs": [],
     }

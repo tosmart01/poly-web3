@@ -46,7 +46,7 @@ if __name__ == "__main__":
         rpc_url="https://polygon-bor.publicnode.com",
     )
 
-    condition_id = "0x58ec217262554683a6c1fa2de9d87addef26dd3348367824d6890c68a98809b0"
+    condition_id = "0xa9cb22dd24532a491bb00d8d5394227fd6c0992a2b81fb61d98cb8bca76916f3"
     amount = 10  # amount in human USDC units
 
     split_result = service.split(condition_id, amount)

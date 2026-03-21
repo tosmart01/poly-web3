@@ -27,6 +27,7 @@ class EOAWeb3Service(BaseWeb3Service):
         amount: int | float | str | Decimal,
         collateral_token: str = USDC_POLYGON,
         parent_collection_id: str = ZERO_BYTES32,
+        negative_risk: bool | None = None,
     ) -> dict | None:
         raise ImportError("EOA wallet split not supported")
 
@@ -36,5 +37,6 @@ class EOAWeb3Service(BaseWeb3Service):
         amount: int | float | str | Decimal,
         collateral_token: str = USDC_POLYGON,
         parent_collection_id: str = ZERO_BYTES32,
+        negative_risk: bool | None = None,
     ) -> dict | None:
         raise ImportError("EOA wallet merge not supported")

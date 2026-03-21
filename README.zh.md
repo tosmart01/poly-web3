@@ -41,6 +41,7 @@ service.merge("0x...", 10)
 ## 拆分/合并说明
 
 - `split`/`merge` 适用于二元市场（Yes/No），内部使用默认分区。
+- 负风险市场会通过官方 Gamma markets API 自动识别，并路由到 NegRisk Adapter。
 - `amount` 为 USDC 人类单位，内部自动转换为最小单位。
 
 ## FAQ
@@ -252,13 +253,14 @@ result = service.redeem(["0x...", "0x..."], batch_size=10)
 service.redeem_all(batch_size=10)
 ```
 
-##### `split(condition_id: str, amount: int | float | str)`
+##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 拆分二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
 
 **参数:**
 - `condition_id` (str): 条件 ID
 - `amount` (int | float | str): USDC 数量
+- `negative_risk` (bool | None): 可选的市场类型提示。为 `None` 时，SDK 会通过官方 Gamma markets API 自动识别，并将负风险市场路由到 NegRisk Adapter。
 
 **返回:**
 - `dict | None`: 交易结果
@@ -269,13 +271,14 @@ service.redeem_all(batch_size=10)
 result = service.split("0x...", 1.25)
 ```
 
-##### `merge(condition_id: str, amount: int | float | str)`
+##### `merge(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 合并二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
 
 **参数:**
 - `condition_id` (str): 条件 ID
 - `amount` (int | float | str): USDC 数量
+- `negative_risk` (bool | None): 可选的市场类型提示。为 `None` 时，SDK 会通过官方 Gamma markets API 自动识别，并将负风险市场路由到 NegRisk Adapter。
 
 **返回:**
 - `dict | None`: 交易结果
