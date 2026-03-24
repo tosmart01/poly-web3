@@ -147,6 +147,170 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(result.error_list[0].market_slug, "market-one")
         self.assertIn("returned None", result.error_list[0].error)
 
+    def test_build_merge_plan_from_positions_marks_missing_side_and_neg_risk(self):
+        positions = [
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 0,
+                "size": 120,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 1,
+                "size": 80,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond2",
+                "slug": "market-two",
+                "outcomeIndex": 0,
+                "size": 50,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond3",
+                "slug": "market-three",
+                "outcomeIndex": 0,
+                "size": 40,
+                "negativeRisk": True,
+            },
+            {
+                "conditionId": "0xcond3",
+                "slug": "market-three",
+                "outcomeIndex": 1,
+                "size": 40,
+                "negativeRisk": True,
+            },
+        ]
+
+        result = self.service._build_merge_plan_from_positions(
+            positions=positions,
+            min_usdc=5,
+            exclude_neg_risk=True,
+        )
+
+        self.assertEqual(len(result), 3)
+        by_condition = {item.condition_id: item for item in result}
+
+        self.assertEqual(by_condition["0xcond1"].mergeable, 80)
+        self.assertIsNone(by_condition["0xcond1"].reason)
+
+        self.assertEqual(by_condition["0xcond2"].mergeable, 0)
+        self.assertEqual(by_condition["0xcond2"].reason, "missing_opposite_side")
+
+        self.assertEqual(by_condition["0xcond3"].mergeable, 40)
+        self.assertEqual(by_condition["0xcond3"].reason, "negative_risk_excluded")
+
+    def test_merge_all_dry_run_returns_plan_without_executing(self):
+        positions = [
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 0,
+                "size": 10,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 1,
+                "size": 8,
+                "negativeRisk": False,
+            },
+        ]
+
+        plan = self.service._build_merge_plan_from_positions(
+            positions=positions,
+            min_usdc=5,
+            exclude_neg_risk=True,
+        )
+
+        with patch.object(
+            DummyWeb3Service,
+            "plan_merge_all",
+            return_value=plan,
+        ), patch.object(
+            DummyWeb3Service,
+            "merge",
+            side_effect=AssertionError("merge should not be called"),
+        ):
+            result = self.service.merge_all(
+                min_usdc=5,
+                exclude_neg_risk=True,
+                dry_run=True,
+                max_markets=20,
+            )
+
+        self.assertTrue(result.dry_run)
+        self.assertEqual(len(result.plan_list), 1)
+        self.assertEqual(result.success_list, [])
+        self.assertEqual(result.error_list, [])
+
+    def test_merge_all_executes_up_to_max_markets(self):
+        positions = [
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 0,
+                "size": 12,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond1",
+                "slug": "market-one",
+                "outcomeIndex": 1,
+                "size": 10,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond2",
+                "slug": "market-two",
+                "outcomeIndex": 0,
+                "size": 9,
+                "negativeRisk": False,
+            },
+            {
+                "conditionId": "0xcond2",
+                "slug": "market-two",
+                "outcomeIndex": 1,
+                "size": 9,
+                "negativeRisk": False,
+            },
+        ]
+
+        plan = self.service._build_merge_plan_from_positions(
+            positions=positions,
+            min_usdc=5,
+            exclude_neg_risk=True,
+        )
+
+        with patch.object(
+            DummyWeb3Service,
+            "plan_merge_all",
+            return_value=plan,
+        ), patch.object(
+            DummyWeb3Service,
+            "merge",
+            return_value={"transactionID": "merge-tx"},
+        ) as mock_merge:
+            result = self.service.merge_all(
+                min_usdc=5,
+                exclude_neg_risk=True,
+                dry_run=False,
+                max_markets=1,
+            )
+
+        self.assertFalse(result.dry_run)
+        self.assertEqual(len(result.plan_list), 2)
+        self.assertEqual(len(result.success_list), 1)
+        self.assertEqual(result.success_list[0].condition_id, "0xcond1")
+        self.assertEqual(result.success_list[0].mergeable, 10)
+        self.assertEqual(result.error_list, [])
+        self.assertEqual(mock_merge.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

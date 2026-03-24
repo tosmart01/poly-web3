@@ -29,6 +29,8 @@ service.redeem_all(batch_size=10)
 # Split/Merge for binary markets (amount in human USDC units).
 service.split("0x...", 10)
 service.merge("0x...", 10)
+service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+service.merge_all(min_usdc=5, exclude_neg_risk=True, dry_run=True, max_markets=20)
 ```
 
 [See the full example](#quick-start)
@@ -188,6 +190,17 @@ merge_result = service.merge(
     1.5,
 )
 print(f"Merge result: {merge_result}")
+
+merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+print(f"Merge plan: {merge_plan}")
+
+merge_all_result = service.merge_all(
+    min_usdc=5,
+    exclude_neg_risk=True,
+    dry_run=True,
+    max_markets=20,
+)
+print(f"Merge all result: {merge_all_result}")
 ```
 
 ### Address Analysis (Optional)
@@ -290,6 +303,43 @@ Merge a binary (Yes/No) position. `amount` is in human USDC units.
 
 ```python
 result = service.merge("0x...", 1.25)
+```
+
+##### `plan_merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True) -> list[MergePlanItem]`
+
+Scan all current positions and compute merge opportunities without submitting transactions.
+
+**Returns:**
+- `list[MergePlanItem]`: Each item includes `condition_id`, `market_slug`, `yes_balance`, `no_balance`, `mergeable`, `negative_risk`, and `reason`
+
+**Examples:**
+
+```python
+plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+```
+
+##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, dry_run: bool = False, max_markets: int = 20) -> MergeAllResult`
+
+Plan and optionally execute merge operations for current positions.
+
+**Parameters:**
+- `min_usdc` (int | float | str): Skip mergeable amounts below this threshold
+- `exclude_neg_risk` (bool): Skip neg-risk markets in this first-pass bulk merge flow
+- `dry_run` (bool): When `True`, only return the merge plan and do not submit transactions
+- `max_markets` (int): Maximum number of mergeable markets to execute in one call
+
+**Returns:**
+- `MergeAllResult`: Contains `plan_list`, `success_list`, `error_list`, and `error_condition_ids`
+
+**Examples:**
+
+```python
+result = service.merge_all(
+    min_usdc=5,
+    exclude_neg_risk=True,
+    dry_run=False,
+    max_markets=20,
+)
 ```
 
 #### Optional APIs

@@ -7,7 +7,7 @@
 from decimal import Decimal
 
 from poly_web3.const import USDC_POLYGON, ZERO_BYTES32
-from poly_web3.schema import RedeemResult
+from poly_web3.schema import MergeAllResult, MergePlanItem, RedeemResult
 from poly_web3.web3_service.base import BaseWeb3Service
 
 
@@ -21,6 +21,22 @@ class EOAWeb3Service(BaseWeb3Service):
 
     def redeem_all(self, batch_size: int = 10) -> RedeemResult:
         raise ImportError("EOA wallet redeem not supported")
+
+    def plan_merge_all(
+        self,
+        min_usdc: int | float | str | Decimal = 5,
+        exclude_neg_risk: bool = True,
+    ) -> list[MergePlanItem]:
+        raise ImportError("EOA wallet merge not supported")
+
+    def merge_all(
+        self,
+        min_usdc: int | float | str | Decimal = 5,
+        exclude_neg_risk: bool = True,
+        dry_run: bool = False,
+        max_markets: int = 20,
+    ) -> MergeAllResult:
+        raise ImportError("EOA wallet merge not supported")
 
     def split(
         self,

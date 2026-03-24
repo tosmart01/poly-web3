@@ -29,6 +29,8 @@ service.redeem_all(batch_size=10)
 # 二元市场拆分/合并（amount 为 USDC 人类单位）
 service.split("0x...", 10)
 service.merge("0x...", 10)
+service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+service.merge_all(min_usdc=5, exclude_neg_risk=True, dry_run=True, max_markets=20)
 ```
 
 [查看完整示例](#快速开始)
@@ -190,6 +192,17 @@ merge_result = service.merge(
     1.5,
 )
 print(f"合并结果: {merge_result}")
+
+merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+print(f"合并计划: {merge_plan}")
+
+merge_all_result = service.merge_all(
+    min_usdc=5,
+    exclude_neg_risk=True,
+    dry_run=True,
+    max_markets=20,
+)
+print(f"批量合并结果: {merge_all_result}")
 ```
 
 ### 地址分析（可选）
@@ -295,6 +308,43 @@ result = service.split("0x...", 1.25)
 
 ```python
 result = service.merge("0x...", 1.25)
+```
+
+##### `plan_merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True) -> list[MergePlanItem]`
+
+扫描当前持仓，计算所有可合并机会，但不发送交易。
+
+**返回:**
+- `list[MergePlanItem]`: 每项包含 `condition_id`、`market_slug`、`yes_balance`、`no_balance`、`mergeable`、`negative_risk`、`reason`
+
+**示例:**
+
+```python
+plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+```
+
+##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, dry_run: bool = False, max_markets: int = 20) -> MergeAllResult`
+
+批量规划并按需执行合并操作。
+
+**参数:**
+- `min_usdc` (int | float | str): 小于该可合并金额的市场会被跳过
+- `exclude_neg_risk` (bool): 第一版批量合并流程中是否跳过 neg-risk 市场
+- `dry_run` (bool): 为 `True` 时只返回计划，不发送交易
+- `max_markets` (int): 单次最多执行的市场数量
+
+**返回:**
+- `MergeAllResult`: 包含 `plan_list`、`success_list`、`error_list` 和 `error_condition_ids`
+
+**示例:**
+
+```python
+result = service.merge_all(
+    min_usdc=5,
+    exclude_neg_risk=True,
+    dry_run=False,
+    max_markets=20,
+)
 ```
 
 #### 可选 API

@@ -33,7 +33,15 @@ from poly_web3.const import (
     NEG_RISK_ADAPTER_ABI_SPLIT,
     NEG_RISK_ADAPTER_ABI_MERGE,
 )
-from poly_web3.schema import RedeemErrorItem, RedeemResult, WalletType
+from poly_web3.schema import (
+    MergeAllResult,
+    MergeErrorItem,
+    MergePlanItem,
+    MergeSuccessItem,
+    RedeemErrorItem,
+    RedeemResult,
+    WalletType,
+)
 from poly_web3.log import logger
 
 
@@ -118,6 +126,42 @@ class BaseWeb3Service:
             return [i for i in positions if i.get("percentPnl") > 0]
         except Exception as e:
             logger.error(f"Failed to fetch positions from API: {e}")
+            return []
+
+    @classmethod
+    def fetch_all_positions(cls, user_address: str) -> list[dict]:
+        """
+        Fetch all current positions for a user from the official Positions API.
+        """
+        url = "https://data-api.polymarket.com/positions"
+        limit = 500
+        offset = 0
+        positions: list[dict] = []
+
+        try:
+            while True:
+                response = requests.get(
+                    url,
+                    params={
+                        "user": user_address,
+                        "sizeThreshold": 0,
+                        "limit": limit,
+                        "offset": offset,
+                        "sortBy": "TOKENS",
+                        "sortDirection": "DESC",
+                    },
+                )
+                response.raise_for_status()
+                page = response.json()
+                if not isinstance(page, list) or not page:
+                    break
+                positions.extend(page)
+                if len(page) < limit:
+                    break
+                offset += limit
+            return positions
+        except Exception as e:
+            logger.error(f"Failed to fetch all positions from API: {e}")
             return []
 
     def is_condition_resolved(self, condition_id: str) -> bool:
@@ -332,6 +376,81 @@ class BaseWeb3Service:
         return self._submit_transactions(txs, "redeem")
 
     @staticmethod
+    def _normalize_position_size(size: Any) -> float:
+        try:
+            return float(size or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @classmethod
+    def _build_merge_plan_from_positions(
+            cls,
+            positions: list[dict],
+            min_usdc: int | float | str | Decimal = 5,
+            exclude_neg_risk: bool = True,
+    ) -> list[MergePlanItem]:
+        min_usdc_float = float(Decimal(str(min_usdc)))
+        positions_by_condition: dict[str, list[dict]] = {}
+        for pos in positions:
+            condition_id = pos.get("conditionId")
+            if not condition_id:
+                continue
+            positions_by_condition.setdefault(condition_id, []).append(pos)
+
+        plan_list: list[MergePlanItem] = []
+        for condition_id, condition_positions in positions_by_condition.items():
+            yes_balance = 0.0
+            no_balance = 0.0
+            negative_risk = False
+            market_slug = None
+            invalid_outcome_index = False
+
+            for pos in condition_positions:
+                market_slug = market_slug or pos.get("slug")
+                negative_risk = negative_risk or bool(pos.get("negativeRisk"))
+                outcome_index = pos.get("outcomeIndex")
+                size = cls._normalize_position_size(pos.get("size"))
+                if outcome_index == 0:
+                    yes_balance += size
+                elif outcome_index == 1:
+                    no_balance += size
+                else:
+                    invalid_outcome_index = True
+
+            mergeable = min(yes_balance, no_balance)
+            reason = None
+            if invalid_outcome_index:
+                reason = "unsupported_outcome_index"
+            elif exclude_neg_risk and negative_risk:
+                reason = "negative_risk_excluded"
+            elif yes_balance <= 0 or no_balance <= 0:
+                reason = "missing_opposite_side"
+            elif mergeable < min_usdc_float:
+                reason = "below_min_usdc"
+
+            plan_list.append(
+                MergePlanItem(
+                    condition_id=condition_id,
+                    market_slug=market_slug,
+                    yes_balance=yes_balance,
+                    no_balance=no_balance,
+                    mergeable=mergeable,
+                    negative_risk=negative_risk,
+                    reason=reason,
+                )
+            )
+
+        return sorted(
+            plan_list,
+            key=lambda item: (
+                item.reason is not None,
+                -item.mergeable,
+                item.market_slug or "",
+                item.condition_id,
+            ),
+        )
+
+    @staticmethod
     def _build_redeem_error_items(
             batch_positions: list[dict], error: Exception
     ) -> list[RedeemErrorItem]:
@@ -538,6 +657,83 @@ class BaseWeb3Service:
         """
         positions = self.fetch_positions(user_address=self._resolve_user_address())
         return self._redeem_from_positions(positions, batch_size)
+
+    def plan_merge_all(
+            self,
+            min_usdc: int | float | str | Decimal = 5,
+            exclude_neg_risk: bool = True,
+    ) -> list[MergePlanItem]:
+        """
+        Scan current positions and compute merge opportunities without executing.
+        """
+        positions = self.fetch_all_positions(user_address=self._resolve_user_address())
+        return self._build_merge_plan_from_positions(
+            positions=positions,
+            min_usdc=min_usdc,
+            exclude_neg_risk=exclude_neg_risk,
+        )
+
+    def merge_all(
+            self,
+            min_usdc: int | float | str | Decimal = 5,
+            exclude_neg_risk: bool = True,
+            dry_run: bool = False,
+            max_markets: int = 20,
+    ) -> MergeAllResult:
+        """
+        Plan and optionally execute merge operations across all mergeable markets.
+        """
+        if max_markets <= 0:
+            raise Exception("max_markets must be greater than 0")
+
+        plan_list = self.plan_merge_all(
+            min_usdc=min_usdc,
+            exclude_neg_risk=exclude_neg_risk,
+        )
+        merge_result = MergeAllResult(
+            dry_run=dry_run,
+            plan_list=plan_list,
+        )
+        if dry_run:
+            return merge_result
+
+        executable_plans = [
+            item for item in plan_list if item.reason is None and item.mergeable > 0
+        ][:max_markets]
+        for item in executable_plans:
+            try:
+                merge_res = self.merge(
+                    condition_id=item.condition_id,
+                    amount=item.mergeable,
+                    negative_risk=item.negative_risk,
+                )
+                if merge_res is None:
+                    raise Exception("merge execute returned None")
+                merge_result.success_list.append(
+                    MergeSuccessItem(
+                        condition_id=item.condition_id,
+                        market_slug=item.market_slug,
+                        mergeable=item.mergeable,
+                        result=merge_res,
+                    )
+                )
+                logger.info(
+                    f"{item.market_slug} merge success, mergeable={item.mergeable:.4f} usdc"
+                )
+            except Exception as exc:
+                merge_result.error_list.append(
+                    MergeErrorItem(
+                        condition_id=item.condition_id,
+                        market_slug=item.market_slug,
+                        mergeable=item.mergeable,
+                        error=str(exc),
+                    )
+                )
+                logger.error(
+                    "merge market error, "
+                    f"condition_id={item.condition_id}, market_slug={item.market_slug}, error={exc}"
+                )
+        return merge_result
 
     def split(
             self,

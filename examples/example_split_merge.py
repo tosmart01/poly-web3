@@ -54,3 +54,14 @@ if __name__ == "__main__":
 
     merge_result = service.merge(condition_id, amount)
     print(merge_result)
+
+    merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+    print(merge_plan)
+
+    merge_all_result = service.merge_all(
+        min_usdc=5,
+        exclude_neg_risk=True,
+        dry_run=True,
+        max_markets=20,
+    )
+    print(merge_all_result)
