@@ -7,6 +7,7 @@
 from decimal import Decimal
 
 from poly_web3.const import USDC_POLYGON, ZERO_BYTES32
+from poly_web3.schema import RedeemResult
 from poly_web3.web3_service.base import BaseWeb3Service
 
 
@@ -15,10 +16,10 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         condition_ids: str | list[str],
         batch_size: int = 10,
-    ):
+    ) -> RedeemResult:
         raise ImportError("EOA wallet redeem not supported")
 
-    def redeem_all(self, batch_size: int = 10) -> list[dict]:
+    def redeem_all(self, batch_size: int = 10) -> RedeemResult:
         raise ImportError("EOA wallet redeem not supported")
 
     def split(

@@ -36,7 +36,9 @@ service.merge("0x...", 10)
 ## Redeem Behavior Notes
 
 - Redeemable positions are fetched via the official Positions API, which typically has ~1 minute latency.
-- `redeem_all` returns an empty list if there are no redeemable positions. If the returned list contains `None`, the redeem failed and should be retried.
+- `redeem` and `redeem_all` return a `RedeemResult` pydantic object with `success_list` and `error_list`.
+- `success_list` keeps the raw relayer `execute` result structure; `error_list` exposes `condition_id`, `market_slug`, and `error` for retry/backfill.
+- `error_condition_ids` is a shortcut list derived from `error_list`, so you can directly retry with `service.redeem(result.error_condition_ids)`.
 
 ## Split/Merge Notes
 
@@ -154,9 +156,11 @@ service = PolyWeb3Service(
 # Redeem all positions that are currently redeemable
 redeem_all_result = service.redeem_all(batch_size=10)
 print(f"Redeem all result: {redeem_all_result}")
-# If redeem_all_result contains None, refer to README FAQ and retry.
-if redeem_all_result and any(item is None for item in redeem_all_result):
+if redeem_all_result.error_list:
     print("Redeem failed for some items; please retry.")
+    print(redeem_all_result.error_list)
+    retry_result = service.redeem(redeem_all_result.error_condition_ids, batch_size=10)
+    print(f"Retry result: {retry_result}")
 
 # Execute redeem operation (batch)
 condition_ids = [
@@ -165,7 +169,7 @@ condition_ids = [
 ]
 redeem_batch_result = service.redeem(condition_ids, batch_size=10)
 print(f"Redeem batch result: {redeem_batch_result}")
-if redeem_all_result and any(item is None for item in redeem_all_result):
+if redeem_batch_result.error_list:
     print("Redeem failed for some items; please retry.")
 ```
 
@@ -217,7 +221,7 @@ The main service class that automatically selects the appropriate service implem
 
 #### Methods
 
-##### `redeem(condition_ids: list[str], batch_size: int = 20)`
+##### `redeem(condition_ids: list[str], batch_size: int = 20) -> RedeemResult`
 
 Execute redeem operation.
 
@@ -226,7 +230,10 @@ Execute redeem operation.
 - `batch_size` (int): Batch size for redeem requests
 
 **Returns:**
-- `dict | list[dict]`: Transaction result(s) containing transaction status and related information
+- `RedeemResult`: A pydantic object with:
+- `success_list`: Raw relayer `execute` result payloads for successful batches
+- `error_list`: Failed condition entries with `condition_id`, `market_slug`, and `error`
+- `error_condition_ids`: Shortcut list for retry, derived from `error_list`
 
 **Examples:**
 
@@ -235,12 +242,12 @@ Execute redeem operation.
 result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```
 
-##### `redeem_all(batch_size: int = 20) -> list[dict]`
+##### `redeem_all(batch_size: int = 20) -> RedeemResult`
 
 Redeem all positions that are currently redeemable for the authenticated account.
 
 **Returns:**
-- `list[dict]`: List of redeem results; empty list if no redeemable positions. If the list contains `None`, the redeem failed and should be retried.
+- `RedeemResult`: Empty `success_list` and `error_list` if no redeemable positions. Partial failures are surfaced in `error_list` instead of returning `None`.
 
 **Examples:**
 

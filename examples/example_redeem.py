@@ -47,9 +47,12 @@ if __name__ == "__main__":
         rpc_url="https://polygon-bor.publicnode.com",
     )
 
-    # Redeem all positions that are currently redeemable (returns list or None)
+    # Redeem all positions that are currently redeemable
     redeem_all = service.redeem_all(batch_size=10)
     print(redeem_all)
+    if redeem_all.error_list:
+        print("Redeem all failed items:", redeem_all.error_list)
+        print("Retry condition ids:", redeem_all.error_condition_ids)
 
     # Redeem in batch
     condition_ids = [
@@ -57,6 +60,9 @@ if __name__ == "__main__":
     ]
     redeem_batch = service.redeem(condition_ids, batch_size=10)
     print(redeem_batch)
+    if redeem_batch.error_list:
+        print("Redeem batch failed items:", redeem_batch.error_list)
+        print("Retry condition ids:", redeem_batch.error_condition_ids)
 
 
     # Optional - Query operations (可选操作，用于查询)

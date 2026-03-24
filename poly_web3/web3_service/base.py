@@ -33,7 +33,7 @@ from poly_web3.const import (
     NEG_RISK_ADAPTER_ABI_SPLIT,
     NEG_RISK_ADAPTER_ABI_MERGE,
 )
-from poly_web3.schema import WalletType
+from poly_web3.schema import RedeemErrorItem, RedeemResult, WalletType
 from poly_web3.log import logger
 
 
@@ -331,29 +331,55 @@ class BaseWeb3Service:
     def _submit_redeem(self, txs: list[Any]) -> dict | None:
         return self._submit_transactions(txs, "redeem")
 
-    def _redeem_batch(self, condition_ids: list[str], batch_size: int) -> list[dict]:
+    @staticmethod
+    def _build_redeem_error_items(
+            batch_positions: list[dict], error: Exception
+    ) -> list[RedeemErrorItem]:
+        error_message = str(error)
+        error_items: list[RedeemErrorItem] = []
+        seen_condition_ids: set[str] = set()
+
+        for pos in batch_positions:
+            condition_id = pos.get("conditionId")
+            if not condition_id or condition_id in seen_condition_ids:
+                continue
+            seen_condition_ids.add(condition_id)
+            error_items.append(
+                RedeemErrorItem(
+                    condition_id=condition_id,
+                    market_slug=pos.get("slug"),
+                    error=error_message,
+                )
+            )
+        return error_items
+
+    def _redeem_batch(
+            self, condition_ids: list[str], batch_size: int
+    ) -> RedeemResult:
         """
         Fetch positions by condition IDs in batches, then redeem each batch.
         """
         if not condition_ids:
-            return []
+            return RedeemResult()
         user_address = self._resolve_user_address()
-        redeem_list = []
+        redeem_result = RedeemResult()
         for batch in self._chunk_condition_ids(condition_ids, batch_size):
             positions = self.fetch_positions_by_condition_ids(
                 user_address=user_address, condition_ids=batch
             )
-            redeem_list.extend(self._redeem_from_positions(positions, len(batch)))
-        return redeem_list
+            batch_result = self._redeem_from_positions(positions, len(batch))
+            redeem_result.success_list.extend(batch_result.success_list)
+            redeem_result.error_list.extend(batch_result.error_list)
+        return redeem_result
 
     def _redeem_from_positions(
             self, positions: list[dict], batch_size: int
-    ) -> list[dict]:
+    ) -> RedeemResult:
         """
         Build and submit redeem transactions from a list of positions.
         """
         if not positions:
-            return []
+            return RedeemResult()
         positions_by_condition: dict[str, list[dict]] = {}
         for pos in positions:
             condition_id = pos.get("conditionId")
@@ -361,8 +387,7 @@ class BaseWeb3Service:
                 continue
             positions_by_condition.setdefault(condition_id, []).append(pos)
 
-        redeem_list = []
-        error_list: list[str] = []
+        redeem_result = RedeemResult()
         condition_ids = list(positions_by_condition.keys())
         for batch in self._chunk_condition_ids(condition_ids, batch_size):
             batch_positions = []
@@ -373,7 +398,9 @@ class BaseWeb3Service:
                 if not txs:
                     continue
                 redeem_res = self._submit_redeem(txs)
-                redeem_list.append(redeem_res)
+                if redeem_res is None:
+                    raise Exception("redeem execute returned None")
+                redeem_result.success_list.append(redeem_res)
                 for pos in batch_positions:
                     buy_price = pos.get("avgPrice")
                     size = pos.get("size")
@@ -384,11 +411,16 @@ class BaseWeb3Service:
                         f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc"
                     )
             except Exception as e:
-                error_list.extend(batch)
+                redeem_result.error_list.extend(
+                    self._build_redeem_error_items(batch_positions, e)
+                )
                 logger.error(f"redeem batch error, {batch=}, error={e}")
-        if error_list:
-            logger.warning(f"error redeem condition list, {error_list}")
-        return redeem_list
+        if redeem_result.error_list:
+            logger.warning(
+                "error redeem condition list, "
+                f"{[item.condition_id for item in redeem_result.error_list]}"
+            )
+        return redeem_result
 
     @classmethod
     def _get_relay_payload(cls, address: str, wallet_type: WalletType):
@@ -492,7 +524,7 @@ class BaseWeb3Service:
             self,
             condition_ids: str | list[str],
             batch_size: int = 10,
-    ):
+    ) -> RedeemResult:
         """
         Redeem positions for the given condition IDs.
         """
@@ -500,7 +532,7 @@ class BaseWeb3Service:
             condition_ids = [condition_ids]
         return self._redeem_batch(condition_ids, batch_size)
 
-    def redeem_all(self, batch_size: int = 10) -> list[dict]:
+    def redeem_all(self, batch_size: int = 10) -> RedeemResult:
         """
         Redeem all currently redeemable positions for the user.
         """

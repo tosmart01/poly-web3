@@ -36,7 +36,9 @@ service.merge("0x...", 10)
 ## 赎回说明
 
 - 可赎回仓位通过官方 Positions API 查询，通常有约 1 分钟延迟。
-- `redeem_all` 若无可赎回仓位则返回空数组；若返回数组中包含 `None`，表示赎回失败，需要重试。
+- `redeem` 和 `redeem_all` 现在都返回 `RedeemResult` 这个 pydantic 对象，包含 `success_list` 和 `error_list`。
+- `success_list` 保留原始 relayer `execute` 返回结构；`error_list` 会带上 `condition_id`、`market_slug` 和 `error`，方便回溯和重试。
+- `error_condition_ids` 是从 `error_list` 派生出的快捷重试列表，可直接 `service.redeem(result.error_condition_ids)`。
 
 ## 拆分/合并说明
 
@@ -155,9 +157,12 @@ service = PolyWeb3Service(
 # 赎回当前账户下所有可赎回仓位
 redeem_all_result = service.redeem_all(batch_size=10)
 print(f"全部赎回结果: {redeem_all_result}")
-# 如果 redeem_all_result 列表中有 None，则表示失败，请参考 README FAQ 后重试
-if redeem_all_result and any(item is None for item in redeem_all_result):
+# 如果有失败项，可直接读取 error_list 做回溯与重试
+if redeem_all_result.error_list:
     print("部分赎回失败，请重试。")
+    print(redeem_all_result.error_list)
+    retry_result = service.redeem(redeem_all_result.error_condition_ids, batch_size=10)
+    print(f"重试结果: {retry_result}")
 
 # 执行赎回操作（批量）
 condition_ids = [
@@ -166,7 +171,7 @@ condition_ids = [
 ]
 redeem_batch_result = service.redeem(condition_ids, batch_size=10)
 print(f"批量赎回结果: {redeem_batch_result}")
-if redeem_all_result and any(item is None for item in redeem_all_result):
+if redeem_batch_result.error_list:
     print("部分赎回失败，请重试。")
 ```
 
@@ -218,7 +223,7 @@ analysis-poly
 
 #### 方法
 
-##### `redeem(condition_ids: str | list[str], batch_size: int = 20)`
+##### `redeem(condition_ids: str | list[str], batch_size: int = 20) -> RedeemResult`
 
 执行赎回操作。
 
@@ -227,7 +232,10 @@ analysis-poly
 - `batch_size` (int): 每批次处理数量
 
 **返回:**
-- `dict | list[dict]`: 交易结果，包含交易状态和相关信息
+- `RedeemResult`: pydantic 结果对象，包含：
+- `success_list`: 成功批次的原始 relayer `execute` 返回结果
+- `error_list`: 失败条目列表，包含 `condition_id`、`market_slug` 和 `error`
+- `error_condition_ids`: 从 `error_list` 派生出的快捷重试 condition id 列表
 
 **示例:**
 
@@ -239,12 +247,12 @@ result = service.redeem("0x...")
 result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```
 
-##### `redeem_all(batch_size: int = 20) -> list[dict]`
+##### `redeem_all(batch_size: int = 20) -> RedeemResult`
 
 赎回当前账户下所有可赎回仓位。
 
 **返回:**
-- `list[dict]`: 赎回结果列表；若无可赎回仓位则返回空数组；若数组中包含 `None`，表示赎回失败，需要重试
+- `RedeemResult`: 若无可赎回仓位，则 `success_list` / `error_list` 都为空；部分失败会显式出现在 `error_list` 中，不再返回 `None`
 
 **示例:**
 

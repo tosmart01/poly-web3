@@ -11,7 +11,7 @@ from py_builder_relayer_client.client import RelayClient
 
 from poly_web3.const import RELAYER_URL
 from poly_web3.web3_service.base import BaseWeb3Service
-from poly_web3.schema import WalletType
+from poly_web3.schema import RedeemErrorItem, RedeemResult, WalletType
 from poly_web3.web3_service import SafeWeb3Service, EOAWeb3Service, ProxyWeb3Service
 
 
