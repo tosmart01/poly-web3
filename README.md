@@ -25,6 +25,7 @@ service = PolyWeb3Service(
 
 # Redeem all redeemable positions for the current account.
 service.redeem_all(batch_size=10)
+service.redeem(condition_ids=["0x..."])
 
 # Split/Merge for binary markets (amount in human USDC units).
 service.split("0x...", 10)

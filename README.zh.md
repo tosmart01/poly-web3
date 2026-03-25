@@ -25,12 +25,18 @@ service = PolyWeb3Service(
 
 # 赎回当前账户下所有可赎回仓位
 service.redeem_all(batch_size=10)
+# 指定 condition_ids 赎回
+service.redeem(condition_ids=["0x..."])
 
-# 二元市场拆分/合并（amount 为 USDC 人类单位）
+# Split/Merge for binary markets (amount in human USDC units).
 service.split("0x...", 10)
 service.merge("0x...", 10)
-service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-service.merge_all(min_usdc=5, exclude_neg_risk=True, max_markets=20, batch_size=10)
+# merge 所有仓位
+service.merge_all(min_usdc=1, batch_size=10)
+
+# 批量 Split/Merge
+service.split_batch([{"condition_id": "", "amount": 10}])
+service.merge_batch([{"condition_id": "", "amount": 10}])
 ```
 
 [查看完整示例](#快速开始)
