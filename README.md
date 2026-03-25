@@ -29,8 +29,12 @@ service.redeem_all(batch_size=10)
 # Split/Merge for binary markets (amount in human USDC units).
 service.split("0x...", 10)
 service.merge("0x...", 10)
-service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-service.merge_all(min_usdc=5, exclude_neg_risk=True, dry_run=True, max_markets=20)
+service.merge_all(min_usdc=1, batch_size=10)
+
+# batch Split/Merge
+service.split_batch([{"condition_id": "", "amount": 10}])
+service.merge_batch([{"condition_id": "", "amount": 10}])
+
 ```
 
 [See the full example](#quick-start)
@@ -107,7 +111,7 @@ pip install "poly-web3[analysis]"
 
 ## Quick Start
 
-### Basic Usage - Execute Redeem
+### Basic Usage - Split/Merge
 
 ```python
 import os
@@ -154,53 +158,27 @@ service = PolyWeb3Service(
     rpc_url="https://polygon-bor.publicnode.com",  # optional
 )
 
+condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
+amount = 10  # amount in human USDC units
 
-# Redeem all positions that are currently redeemable
-redeem_all_result = service.redeem_all(batch_size=10)
-print(f"Redeem all result: {redeem_all_result}")
-if redeem_all_result.error_list:
-    print("Redeem failed for some items; please retry.")
-    print(redeem_all_result.error_list)
-    retry_result = service.redeem(redeem_all_result.error_condition_ids, batch_size=10)
-    print(f"Retry result: {retry_result}")
+split_result = service.split(condition_id, amount)
+print(split_result)
 
-# Execute redeem operation (batch)
-condition_ids = [
-    "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-]
-redeem_batch_result = service.redeem(condition_ids, batch_size=10)
-print(f"Redeem batch result: {redeem_batch_result}")
-if redeem_batch_result.error_list:
-    print("Redeem failed for some items; please retry.")
-```
+merge_result = service.merge(condition_id, amount)
+print(merge_result)
 
-### Basic Usage - Split/Merge (Binary Markets)
+split_batch_result = service.split_batch([{"condition_id": condition_id, "amount": 10}])
+print(split_batch_result.model_dump_json(indent=2))
 
-```python
-# amount is in human units (USDC)
-split_result = service.split(
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-    1.5,
-)
-print(f"Split result: {split_result}")
+merge_batch_result = service.merge_batch([{"condition_id": condition_id, "amount": 10}])
+print(merge_batch_result.model_dump_json(indent=2))
 
-merge_result = service.merge(
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-    1.5,
-)
-print(f"Merge result: {merge_result}")
+merge_all_result = service.merge_all(min_usdc=1, batch_size=10)
+print(merge_all_result)
 
 merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-print(f"Merge plan: {merge_plan}")
-
-merge_all_result = service.merge_all(
-    min_usdc=5,
-    exclude_neg_risk=True,
-    dry_run=True,
-    max_markets=20,
-)
-print(f"Merge all result: {merge_all_result}")
+for i in merge_plan:
+    print(i.model_dump_json(indent=2))
 ```
 
 ### Address Analysis (Optional)
@@ -269,6 +247,8 @@ Redeem all positions that are currently redeemable for the authenticated account
 service.redeem_all(batch_size=10)
 ```
 
+See [`examples/example_redeem.py`](examples/example_redeem.py) for a complete redeem example.
+
 ##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 Split a binary (Yes/No) position. `amount` is in human USDC units.
@@ -318,15 +298,15 @@ Scan all current positions and compute merge opportunities without submitting tr
 plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
 ```
 
-##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, dry_run: bool = False, max_markets: int = 20) -> MergeAllResult`
+##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, max_markets: int = 20, batch_size: int = 10) -> MergeAllResult`
 
 Plan and optionally execute merge operations for current positions.
 
 **Parameters:**
 - `min_usdc` (int | float | str): Skip mergeable amounts below this threshold
 - `exclude_neg_risk` (bool): Skip neg-risk markets in this first-pass bulk merge flow
-- `dry_run` (bool): When `True`, only return the merge plan and do not submit transactions
 - `max_markets` (int): Maximum number of mergeable markets to execute in one call
+- `batch_size` (int): Maximum transactions submitted per grouped merge batch
 
 **Returns:**
 - `MergeAllResult`: Contains `plan_list`, `success_list`, `error_list`, and `error_condition_ids`
@@ -337,61 +317,11 @@ Plan and optionally execute merge operations for current positions.
 result = service.merge_all(
     min_usdc=5,
     exclude_neg_risk=True,
-    dry_run=False,
     max_markets=20,
+    batch_size=10,
 )
 ```
 
-#### Optional APIs
-
-##### `is_condition_resolved(condition_id: str) -> bool`
-
-Check if the specified condition is resolved.
-
-**Parameters:**
-- `condition_id` (str): Condition ID (32-byte hexadecimal string)
-
-**Returns:**
-- `bool`: Returns `True` if the condition is resolved, otherwise `False`
-
-##### `get_winning_indexes(condition_id: str) -> list[int]`
-
-Get the list of winning indexes.
-
-**Parameters:**
-- `condition_id` (str): Condition ID
-
-**Returns:**
-- `list[int]`: List of winning indexes
-
-##### `get_redeemable_index_and_balance(condition_id: str, owner: str) -> list[tuple]`
-
-Get redeemable indexes and balances for the specified address.
-
-**Parameters:**
-- `condition_id` (str): Condition ID
-- `owner` (str): Wallet address
-
-**Returns:**
-- `list[tuple]`: List of tuples containing (index, balance), balance is in USDC units
-
-## Optional: Query Operations
-
-Before executing redeem, you can optionally check the condition status and query redeemable balances:
-
-```python
-# Check if condition is resolved
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-can_redeem = service.is_condition_resolved(condition_id)
-
-# Get redeemable indexes and balances
-redeem_balance = service.get_redeemable_index_and_balance(
-    condition_id, owner=client.builder.funder
-)
-
-print(f"Can redeem: {can_redeem}")
-print(f"Redeemable balance: {redeem_balance}")
-```
 
 ## Project Structure
 

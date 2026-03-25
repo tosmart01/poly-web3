@@ -46,7 +46,7 @@ if __name__ == "__main__":
         rpc_url="https://polygon-bor.publicnode.com",
     )
 
-    condition_id = "0xa9cb22dd24532a491bb00d8d5394227fd6c0992a2b81fb61d98cb8bca76916f3"
+    condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
     amount = 10  # amount in human USDC units
 
     split_result = service.split(condition_id, amount)
@@ -55,13 +55,15 @@ if __name__ == "__main__":
     merge_result = service.merge(condition_id, amount)
     print(merge_result)
 
-    merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-    print(merge_plan)
+    split_batch_result = service.split_batch([{"condition_id": condition_id, "amount": 10}])
+    print(split_batch_result.model_dump_json(indent=2))
 
-    merge_all_result = service.merge_all(
-        min_usdc=5,
-        exclude_neg_risk=True,
-        dry_run=True,
-        max_markets=20,
-    )
+    merge_batch_result = service.merge_batch([{"condition_id": condition_id, "amount": 10}])
+    print(merge_batch_result.model_dump_json(indent=2))
+
+    merge_all_result = service.merge_all(min_usdc=1, batch_size=10)
     print(merge_all_result)
+
+    merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+    for i in merge_plan:
+        print(i.model_dump_json(indent=2))

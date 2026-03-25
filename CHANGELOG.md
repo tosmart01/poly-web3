@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.7
+
+- Refactor HTTP requests into a dedicated API client with URL constants and shared `requests.Session` usage.
+- Add batch `split_batch` and `merge_batch` APIs with per-market amounts, `negative_risk` grouping, and configurable `batch_size`.
+- Update `merge_all` to use batch merge execution, honor `min_usdc` explicitly, and document the new workflow in examples and README files.
+
 ## 1.0.6
 
 - Add NegRisk Adapter split/merge support for binary negative-risk markets.

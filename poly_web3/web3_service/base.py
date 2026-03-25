@@ -12,7 +12,6 @@ from py_builder_relayer_client.client import RelayClient
 from py_clob_client.client import ClobClient
 from eth_utils import to_checksum_address
 from web3 import Web3
-import requests
 
 from poly_web3.const import (
     RPC_URL,
@@ -24,16 +23,17 @@ from poly_web3.const import (
     CTF_ABI_SPLIT,
     CTF_ABI_MERGE,
     NEG_RISK_ADAPTER_ADDRESS,
-    RELAYER_URL,
     POL,
     AMOY,
-    GET_RELAY_PAYLOAD,
-    GAMMA_MARKETS_URL,
     NEG_RISK_ADAPTER_ABI_REDEEM,
     NEG_RISK_ADAPTER_ABI_SPLIT,
     NEG_RISK_ADAPTER_ABI_MERGE,
 )
 from poly_web3.schema import (
+    BatchBinaryOperationItem,
+    BatchBinaryOperationErrorItem,
+    BatchBinaryOperationResult,
+    BatchBinaryOperationSuccessItem,
     MergeAllResult,
     MergeErrorItem,
     MergePlanItem,
@@ -43,6 +43,7 @@ from poly_web3.schema import (
     WalletType,
 )
 from poly_web3.log import logger
+from poly_web3.web3_service.api_client import PolymarketAPIClient
 
 
 class BaseWeb3Service:
@@ -64,6 +65,7 @@ class BaseWeb3Service:
         else:
             self.wallet_type = WalletType.PROXY
         self.rpc_url = rpc_url or RPC_URL
+        self.api_client = PolymarketAPIClient(rpc_url=self.rpc_url)
         self.w3: Web3 = Web3(Web3.HTTPProvider(self.rpc_url))
         if self.wallet_type == WalletType.PROXY and relayer_client is None:
             raise Exception("relayer_client must be provided")
@@ -73,96 +75,6 @@ class BaseWeb3Service:
         if funder:
             return funder
         return self.clob_client.get_address()
-
-    @classmethod
-    def fetch_positions(cls, user_address: str) -> list[dict]:
-        """
-        Fetches current positions for a user from the official Polymarket API.
-
-        :param user_address: User wallet address (0x-prefixed, 40 hex chars)
-        :return: List of position dictionaries from the API
-        """
-        url = "https://data-api.polymarket.com/positions"
-        params = {
-            "user": user_address,
-            "sizeThreshold": 1,
-            "limit": 100,
-            "redeemable": True,
-            "sortBy": "RESOLVING",
-            "sortDirection": "DESC",
-        }
-        try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            positions = response.json()
-            return [i for i in positions if i.get("percentPnl") > 0]
-        except Exception as e:
-            logger.error(f"Failed to fetch positions from API: {e}")
-            return []
-
-    @classmethod
-    def fetch_positions_by_condition_ids(
-            cls, user_address: str, condition_ids: list[str]
-    ) -> list[dict]:
-        """
-        Fetches positions for a user filtered by condition IDs.
-
-        :param user_address: User wallet address (0x-prefixed, 40 hex chars)
-        :param condition_ids: List of condition IDs to filter by
-        :return: List of position dictionaries from the API
-        """
-        if not condition_ids:
-            return []
-        url = "https://data-api.polymarket.com/positions"
-        params = {
-            "user": user_address,
-            "market": ",".join(condition_ids),
-            "sizeThreshold": 1
-        }
-        try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            positions = response.json()
-            return [i for i in positions if i.get("percentPnl") > 0]
-        except Exception as e:
-            logger.error(f"Failed to fetch positions from API: {e}")
-            return []
-
-    @classmethod
-    def fetch_all_positions(cls, user_address: str) -> list[dict]:
-        """
-        Fetch all current positions for a user from the official Positions API.
-        """
-        url = "https://data-api.polymarket.com/positions"
-        limit = 500
-        offset = 0
-        positions: list[dict] = []
-
-        try:
-            while True:
-                response = requests.get(
-                    url,
-                    params={
-                        "user": user_address,
-                        "sizeThreshold": 0,
-                        "limit": limit,
-                        "offset": offset,
-                        "sortBy": "TOKENS",
-                        "sortDirection": "DESC",
-                    },
-                )
-                response.raise_for_status()
-                page = response.json()
-                if not isinstance(page, list) or not page:
-                    break
-                positions.extend(page)
-                if len(page) < limit:
-                    break
-                offset += limit
-            return positions
-        except Exception as e:
-            logger.error(f"Failed to fetch all positions from API: {e}")
-            return []
 
     def is_condition_resolved(self, condition_id: str) -> bool:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_PAYOUT)
@@ -294,44 +206,149 @@ class BaseWeb3Service:
             redeem_amounts,
         )._encode_transaction_data()
 
-    @classmethod
-    def get_market_by_condition_id(cls, condition_id: str) -> dict | None:
-        if not condition_id:
-            return None
-        try:
-            response = requests.get(
-                GAMMA_MARKETS_URL,
-                params={"condition_ids": condition_id, "limit": 1},
-                timeout=10,
-            )
-            response.raise_for_status()
-            markets = response.json()
-            if isinstance(markets, list) and markets:
-                return markets[0]
-        except Exception as exc:
-            logger.warning(
-                f"failed to fetch market metadata for condition_id={condition_id}: {exc}"
-            )
-        return None
+    def get_market_by_condition_id(self, condition_id: str) -> dict | None:
+        return self.api_client.get_market_by_condition_id(condition_id)
 
-    @classmethod
-    def is_negative_risk_condition(cls, condition_id: str) -> bool:
-        market = cls.get_market_by_condition_id(condition_id)
+    def is_negative_risk_condition(self, condition_id: str) -> bool:
+        market = self.get_market_by_condition_id(condition_id)
         return bool(market and market.get("negRisk"))
 
-    @classmethod
     def _resolve_negative_risk_flag(
-            cls, condition_id: str, negative_risk: bool | None
+            self, condition_id: str, negative_risk: bool | None
     ) -> bool:
         if negative_risk is not None:
             return negative_risk
-        return cls.is_negative_risk_condition(condition_id)
+        return self.is_negative_risk_condition(condition_id)
 
     def _build_redeem_tx(self, to: str, data: str) -> Any:
         raise NotImplementedError("redeem tx builder not implemented")
 
     def _build_ctf_tx(self, to: str, data: str) -> Any:
         return self._build_redeem_tx(to, data)
+
+    @staticmethod
+    def _normalize_batch_binary_operation_items(
+            operations: list[BatchBinaryOperationItem | dict]
+    ) -> list[BatchBinaryOperationItem]:
+        if not operations:
+            raise Exception("operations must not be empty")
+        return [BatchBinaryOperationItem.model_validate(item) for item in operations]
+
+    def _build_binary_market_tx(
+            self,
+            action: str,
+            condition_id: str,
+            amount: int | float | str | Decimal,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+            negative_risk: bool | None = None,
+    ) -> tuple[bool, Any]:
+        is_negative_risk = self._resolve_negative_risk_flag(
+            condition_id=condition_id,
+            negative_risk=negative_risk,
+        )
+        amount_base_units = self._to_usdc_base_units(amount)
+        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
+
+        if action == "split":
+            data = (
+                self.build_neg_risk_split_tx_data(
+                    condition_id=condition_id,
+                    partition=[1, 2],
+                    amount=amount_base_units,
+                    collateral_token=collateral_token,
+                    parent_collection_id=parent_collection_id,
+                )
+                if is_negative_risk
+                else self.build_ctf_split_tx_data(
+                    condition_id=condition_id,
+                    partition=[1, 2],
+                    amount=amount_base_units,
+                    collateral_token=collateral_token,
+                    parent_collection_id=parent_collection_id,
+                )
+            )
+        elif action == "merge":
+            data = (
+                self.build_neg_risk_merge_tx_data(
+                    condition_id=condition_id,
+                    partition=[1, 2],
+                    amount=amount_base_units,
+                    collateral_token=collateral_token,
+                    parent_collection_id=parent_collection_id,
+                )
+                if is_negative_risk
+                else self.build_ctf_merge_tx_data(
+                    condition_id=condition_id,
+                    partition=[1, 2],
+                    amount=amount_base_units,
+                    collateral_token=collateral_token,
+                    parent_collection_id=parent_collection_id,
+                )
+            )
+        else:
+            raise Exception(f"unsupported action: {action}")
+
+        tx = self._build_ctf_tx(to, data)
+        return is_negative_risk, tx
+
+    def _submit_binary_market_batch(
+            self,
+            action: str,
+            operations: list[BatchBinaryOperationItem | dict],
+            batch_size: int = 10,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> BatchBinaryOperationResult:
+        normalized_operations = self._normalize_batch_binary_operation_items(
+            operations
+        )
+        if batch_size <= 0:
+            raise Exception("batch_size must be greater than 0")
+        grouped_operations: dict[bool, list[tuple[BatchBinaryOperationItem, Any]]] = {
+            False: [],
+            True: [],
+        }
+
+        for operation in normalized_operations:
+            is_negative_risk, tx = self._build_binary_market_tx(
+                action=action,
+                condition_id=operation.condition_id,
+                amount=operation.amount,
+                collateral_token=collateral_token,
+                parent_collection_id=parent_collection_id,
+                negative_risk=operation.negative_risk,
+            )
+            grouped_operations[is_negative_risk].append((operation, tx))
+
+        batch_result = BatchBinaryOperationResult()
+        for is_negative_risk in (False, True):
+            grouped = grouped_operations[is_negative_risk]
+            if not grouped:
+                continue
+            for grouped_chunk in self._chunk_grouped_operations(grouped, batch_size):
+                condition_ids = [item.condition_id for item, _ in grouped_chunk]
+                txs = [tx for _, tx in grouped_chunk]
+                try:
+                    submit_result = self._submit_transactions(txs, action)
+                    if submit_result is None:
+                        raise Exception(f"{action} execute returned None")
+                    batch_result.success_list.append(
+                        BatchBinaryOperationSuccessItem(
+                            negative_risk=is_negative_risk,
+                            condition_ids=condition_ids,
+                            result=submit_result,
+                        )
+                    )
+                except Exception as exc:
+                    batch_result.error_list.append(
+                        BatchBinaryOperationErrorItem(
+                            negative_risk=is_negative_risk,
+                            condition_ids=condition_ids,
+                            error=str(exc),
+                        )
+                    )
+        return batch_result
 
     def _build_redeem_txs_from_positions(self, positions: list[dict]) -> list[Any]:
         neg_amounts_by_condition: dict[str, list[float]] = {}
@@ -483,7 +500,7 @@ class BaseWeb3Service:
         user_address = self._resolve_user_address()
         redeem_result = RedeemResult()
         for batch in self._chunk_condition_ids(condition_ids, batch_size):
-            positions = self.fetch_positions_by_condition_ids(
+            positions = self.api_client.fetch_positions_by_condition_ids(
                 user_address=user_address, condition_ids=batch
             )
             batch_result = self._redeem_from_positions(positions, len(batch))
@@ -541,12 +558,8 @@ class BaseWeb3Service:
             )
         return redeem_result
 
-    @classmethod
-    def _get_relay_payload(cls, address: str, wallet_type: WalletType):
-        return requests.get(
-            RELAYER_URL + GET_RELAY_PAYLOAD,
-            params={"address": address, "type": wallet_type},
-        ).json()
+    def _get_relay_payload(self, address: str, wallet_type: WalletType):
+        return self.api_client.get_relay_payload(address, wallet_type)
 
     @classmethod
     def _raise_relayer_quota_exceeded_if_needed(cls, error_payload: Any):
@@ -591,22 +604,7 @@ class BaseWeb3Service:
         raise Exception("Invalid network")
 
     def estimate_gas(self, tx):
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "eth_estimateGas",
-            "params": [tx],
-            "id": 1,
-        }
-
-        response = requests.post(self.rpc_url, json=payload)
-        result = response.json()
-
-        if "result" in result:
-            # 返回的是16进制 gas 数量
-            gas_hex = result["result"]
-            return str(int(gas_hex, 16))
-        else:
-            raise Exception("Estimate gas error: " + str(result))
+        return self.api_client.estimate_gas(tx)
 
     @classmethod
     def _chunk_condition_ids(
@@ -617,6 +615,19 @@ class BaseWeb3Service:
         return [
             condition_ids[i: i + batch_size]
             for i in range(0, len(condition_ids), batch_size)
+        ]
+
+    @classmethod
+    def _chunk_grouped_operations(
+            cls,
+            grouped_operations: list[tuple[BatchBinaryOperationItem, Any]],
+            batch_size: int,
+    ) -> list[list[tuple[BatchBinaryOperationItem, Any]]]:
+        if batch_size <= 0:
+            raise Exception("batch_size must be greater than 0")
+        return [
+            grouped_operations[i: i + batch_size]
+            for i in range(0, len(grouped_operations), batch_size)
         ]
 
     @staticmethod
@@ -655,18 +666,22 @@ class BaseWeb3Service:
         """
         Redeem all currently redeemable positions for the user.
         """
-        positions = self.fetch_positions(user_address=self._resolve_user_address())
+        positions = self.api_client.fetch_redeemable_positions(
+            user_address=self._resolve_user_address()
+        )
         return self._redeem_from_positions(positions, batch_size)
 
     def plan_merge_all(
             self,
-            min_usdc: int | float | str | Decimal = 5,
-            exclude_neg_risk: bool = True,
+            min_usdc: int | float | str | Decimal = 0.5,
+            exclude_neg_risk: bool = False,
     ) -> list[MergePlanItem]:
         """
         Scan current positions and compute merge opportunities without executing.
         """
-        positions = self.fetch_all_positions(user_address=self._resolve_user_address())
+        positions = self.api_client.fetch_all_mergeable_positions(
+            user_address=self._resolve_user_address()
+        )
         return self._build_merge_plan_from_positions(
             positions=positions,
             min_usdc=min_usdc,
@@ -675,10 +690,10 @@ class BaseWeb3Service:
 
     def merge_all(
             self,
-            min_usdc: int | float | str | Decimal = 5,
-            exclude_neg_risk: bool = True,
-            dry_run: bool = False,
-            max_markets: int = 20,
+            min_usdc: int | float | str | Decimal = 0.5,
+            exclude_neg_risk: bool = False,
+            max_markets: int = 100,
+            batch_size: int = 10,
     ) -> MergeAllResult:
         """
         Plan and optionally execute merge operations across all mergeable markets.
@@ -691,47 +706,69 @@ class BaseWeb3Service:
             exclude_neg_risk=exclude_neg_risk,
         )
         merge_result = MergeAllResult(
-            dry_run=dry_run,
             plan_list=plan_list,
         )
-        if dry_run:
-            return merge_result
+
+        min_usdc_float = float(Decimal(str(min_usdc)))
 
         executable_plans = [
-            item for item in plan_list if item.reason is None and item.mergeable > 0
+            item
+            for item in plan_list
+            if item.reason is None
+            and item.mergeable > 0
+            and item.mergeable >= min_usdc_float
         ][:max_markets]
-        for item in executable_plans:
-            try:
-                merge_res = self.merge(
-                    condition_id=item.condition_id,
-                    amount=item.mergeable,
-                    negative_risk=item.negative_risk,
-                )
-                if merge_res is None:
-                    raise Exception("merge execute returned None")
+        if not executable_plans:
+            return merge_result
+
+        plan_by_condition = {
+            item.condition_id: item for item in executable_plans
+        }
+        batch_result = self.merge_batch(
+            operations=[
+                {
+                    "condition_id": item.condition_id,
+                    "amount": item.mergeable,
+                    "negative_risk": item.negative_risk,
+                }
+                for item in executable_plans
+            ],
+            batch_size=batch_size,
+        )
+
+        for success in batch_result.success_list:
+            for condition_id in success.condition_ids:
+                item = plan_by_condition.get(condition_id)
+                if item is None:
+                    continue
                 merge_result.success_list.append(
                     MergeSuccessItem(
                         condition_id=item.condition_id,
                         market_slug=item.market_slug,
                         mergeable=item.mergeable,
-                        result=merge_res,
+                        result=success.result,
                     )
                 )
                 logger.info(
                     f"{item.market_slug} merge success, mergeable={item.mergeable:.4f} usdc"
                 )
-            except Exception as exc:
+
+        for error in batch_result.error_list:
+            for condition_id in error.condition_ids:
+                item = plan_by_condition.get(condition_id)
+                if item is None:
+                    continue
                 merge_result.error_list.append(
                     MergeErrorItem(
                         condition_id=item.condition_id,
                         market_slug=item.market_slug,
                         mergeable=item.mergeable,
-                        error=str(exc),
+                        error=error.error,
                     )
                 )
                 logger.error(
                     "merge market error, "
-                    f"condition_id={item.condition_id}, market_slug={item.market_slug}, error={exc}"
+                    f"condition_id={item.condition_id}, market_slug={item.market_slug}, error={error.error}"
                 )
         return merge_result
 
@@ -746,34 +783,33 @@ class BaseWeb3Service:
         """
         Split a binary market (Yes/No) position, amount in human units.
         """
-        is_negative_risk = self._resolve_negative_risk_flag(
+        _, tx = self._build_binary_market_tx(
+            action="split",
             condition_id=condition_id,
+            amount=amount,
+            collateral_token=collateral_token,
+            parent_collection_id=parent_collection_id,
             negative_risk=negative_risk,
         )
-        amount_base_units = self._to_usdc_base_units(amount)
-        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
-        data = (
-            self.build_neg_risk_split_tx_data(
-                condition_id=condition_id,
-                partition=[1, 2],
-                amount=amount_base_units,
-                collateral_token=collateral_token,
-                parent_collection_id=parent_collection_id,
-            )
-            if is_negative_risk
-            else self.build_ctf_split_tx_data(
-                condition_id=condition_id,
-                partition=[1, 2],
-                amount=amount_base_units,
-                collateral_token=collateral_token,
-                parent_collection_id=parent_collection_id,
-            )
-        )
-        tx = self._build_ctf_tx(
-            to,
-            data,
-        )
         return self._submit_transactions([tx], "split")
+
+    def split_batch(
+            self,
+            operations: list[BatchBinaryOperationItem | dict],
+            batch_size: int = 10,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> BatchBinaryOperationResult:
+        """
+        Split multiple binary markets in batches. Each operation carries its own amount.
+        """
+        return self._submit_binary_market_batch(
+            action="split",
+            operations=operations,
+            batch_size=batch_size,
+            collateral_token=collateral_token,
+            parent_collection_id=parent_collection_id,
+        )
 
     def merge(
             self,
@@ -787,31 +823,30 @@ class BaseWeb3Service:
         Merge binary positions (Yes/No) back into a single position,
         amount in human units.
         """
-        is_negative_risk = self._resolve_negative_risk_flag(
+        _, tx = self._build_binary_market_tx(
+            action="merge",
             condition_id=condition_id,
+            amount=amount,
+            collateral_token=collateral_token,
+            parent_collection_id=parent_collection_id,
             negative_risk=negative_risk,
         )
-        amount_base_units = self._to_usdc_base_units(amount)
-        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
-        data = (
-            self.build_neg_risk_merge_tx_data(
-                condition_id=condition_id,
-                partition=[1, 2],
-                amount=amount_base_units,
-                collateral_token=collateral_token,
-                parent_collection_id=parent_collection_id,
-            )
-            if is_negative_risk
-            else self.build_ctf_merge_tx_data(
-                condition_id=condition_id,
-                partition=[1, 2],
-                amount=amount_base_units,
-                collateral_token=collateral_token,
-                parent_collection_id=parent_collection_id,
-            )
-        )
-        tx = self._build_ctf_tx(
-            to,
-            data,
-        )
         return self._submit_transactions([tx], "merge")
+
+    def merge_batch(
+            self,
+            operations: list[BatchBinaryOperationItem | dict],
+            batch_size: int = 10,
+            collateral_token: str = USDC_POLYGON,
+            parent_collection_id: str = ZERO_BYTES32,
+    ) -> BatchBinaryOperationResult:
+        """
+        Merge multiple binary markets in batches. Each operation carries its own amount.
+        """
+        return self._submit_binary_market_batch(
+            action="merge",
+            operations=operations,
+            batch_size=batch_size,
+            collateral_token=collateral_token,
+            parent_collection_id=parent_collection_id,
+        )

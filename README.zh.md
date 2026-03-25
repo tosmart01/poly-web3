@@ -30,7 +30,7 @@ service.redeem_all(batch_size=10)
 service.split("0x...", 10)
 service.merge("0x...", 10)
 service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-service.merge_all(min_usdc=5, exclude_neg_risk=True, dry_run=True, max_markets=20)
+service.merge_all(min_usdc=5, exclude_neg_risk=True, max_markets=20, batch_size=10)
 ```
 
 [查看完整示例](#快速开始)
@@ -109,7 +109,7 @@ pip install "poly-web3[analysis]"
 
 ## 快速开始
 
-### 基本使用 - 执行赎回
+### 基本使用 - 拆分/合并
 
 ```python
 import os
@@ -156,53 +156,28 @@ service = PolyWeb3Service(
     rpc_url="https://polygon-bor.publicnode.com",  # 可选
 )
 
-# 赎回当前账户下所有可赎回仓位
-redeem_all_result = service.redeem_all(batch_size=10)
-print(f"全部赎回结果: {redeem_all_result}")
-# 如果有失败项，可直接读取 error_list 做回溯与重试
-if redeem_all_result.error_list:
-    print("部分赎回失败，请重试。")
-    print(redeem_all_result.error_list)
-    retry_result = service.redeem(redeem_all_result.error_condition_ids, batch_size=10)
-    print(f"重试结果: {retry_result}")
+condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
+amount = 10  # amount in human USDC units
 
-# 执行赎回操作（批量）
-condition_ids = [
-    "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c",
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-]
-redeem_batch_result = service.redeem(condition_ids, batch_size=10)
-print(f"批量赎回结果: {redeem_batch_result}")
-if redeem_batch_result.error_list:
-    print("部分赎回失败，请重试。")
-```
+split_result = service.split(condition_id, amount)
+print(split_result)
 
-### 基本使用 - 拆分/合并（二元市场）
+merge_result = service.merge(condition_id, amount)
+print(merge_result)
 
-```python
-# amount 为 USDC 人类单位
-split_result = service.split(
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-    1.5,
-)
-print(f"拆分结果: {split_result}")
+split_batch_result = service.split_batch([{"condition_id": condition_id, "amount": 10}])
+print(split_batch_result.model_dump_json(indent=2))
 
-merge_result = service.merge(
-    "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
-    1.5,
-)
-print(f"合并结果: {merge_result}")
+merge_batch_result = service.merge_batch([{"condition_id": condition_id, "amount": 10}])
+print(merge_batch_result.model_dump_json(indent=2))
+
+merge_all_result = service.merge_all(min_usdc=1, batch_size=10)
+print(merge_all_result)
 
 merge_plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
-print(f"合并计划: {merge_plan}")
+for i in merge_plan:
+    print(i.model_dump_json(indent=2))
 
-merge_all_result = service.merge_all(
-    min_usdc=5,
-    exclude_neg_risk=True,
-    dry_run=True,
-    max_markets=20,
-)
-print(f"批量合并结果: {merge_all_result}")
 ```
 
 ### 地址分析（可选）
@@ -274,6 +249,8 @@ result = service.redeem(["0x...", "0x..."], batch_size=10)
 service.redeem_all(batch_size=10)
 ```
 
+完整赎回示例见 [`examples/example_redeem.py`](examples/example_redeem.py)。
+
 ##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
 拆分二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
@@ -323,15 +300,15 @@ result = service.merge("0x...", 1.25)
 plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
 ```
 
-##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, dry_run: bool = False, max_markets: int = 20) -> MergeAllResult`
+##### `merge_all(min_usdc: int | float | str = 5, exclude_neg_risk: bool = True, max_markets: int = 20, batch_size: int = 10) -> MergeAllResult`
 
 批量规划并按需执行合并操作。
 
 **参数:**
 - `min_usdc` (int | float | str): 小于该可合并金额的市场会被跳过
 - `exclude_neg_risk` (bool): 第一版批量合并流程中是否跳过 neg-risk 市场
-- `dry_run` (bool): 为 `True` 时只返回计划，不发送交易
 - `max_markets` (int): 单次最多执行的市场数量
+- `batch_size` (int): 分组后每批最多提交的 merge 交易数量
 
 **返回:**
 - `MergeAllResult`: 包含 `plan_list`、`success_list`、`error_list` 和 `error_condition_ids`
@@ -342,60 +319,9 @@ plan = service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
 result = service.merge_all(
     min_usdc=5,
     exclude_neg_risk=True,
-    dry_run=False,
     max_markets=20,
+    batch_size=10,
 )
-```
-
-#### 可选 API
-
-##### `is_condition_resolved(condition_id: str) -> bool`
-
-检查指定的条件是否已解决。
-
-**参数:**
-- `condition_id` (str): 条件 ID（32 字节的十六进制字符串）
-
-**返回:**
-- `bool`: 如果条件已解决返回 `True`，否则返回 `False`
-
-##### `get_winning_indexes(condition_id: str) -> list[int]`
-
-获取获胜的索引列表。
-
-**参数:**
-- `condition_id` (str): 条件 ID
-
-**返回:**
-- `list[int]`: 获胜索引的列表
-
-##### `get_redeemable_index_and_balance(condition_id: str, owner: str) -> list[tuple]`
-
-获取指定地址可赎回的索引和余额。
-
-**参数:**
-- `condition_id` (str): 条件 ID
-- `owner` (str): 钱包地址
-
-**返回:**
-- `list[tuple]`: 包含 (index, balance) 元组的列表，余额单位为 USDC
-
-## 可选：查询操作
-
-在执行赎回之前，您可以选择性地检查条件状态和查询可赎回余额：
-
-```python
-# 检查条件是否已解决
-condition_id = "0xc3df016175463c44f9c9f98bddaa3bf3daaabb14b069fb7869621cffe73ddd1c"
-can_redeem = service.is_condition_resolved(condition_id)
-
-# 获取可赎回的索引和余额
-redeem_balance = service.get_redeemable_index_and_balance(
-    condition_id, owner=client.builder.funder
-)
-
-print(f"可赎回: {can_redeem}")
-print(f"可赎回余额: {redeem_balance}")
 ```
 
 ## 项目结构

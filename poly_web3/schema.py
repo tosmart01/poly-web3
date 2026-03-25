@@ -6,6 +6,7 @@
 # @Software: PyCharm
 from enum import Enum
 from typing import Any
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -48,6 +49,29 @@ class RedeemResult(BaseModel):
         return condition_ids
 
 
+class BatchBinaryOperationItem(BaseModel):
+    condition_id: str
+    amount: int | float | str | Decimal
+    negative_risk: bool | None = None
+
+
+class BatchBinaryOperationSuccessItem(BaseModel):
+    negative_risk: bool
+    condition_ids: list[str]
+    result: dict[str, Any]
+
+
+class BatchBinaryOperationErrorItem(BaseModel):
+    negative_risk: bool
+    condition_ids: list[str]
+    error: str
+
+
+class BatchBinaryOperationResult(BaseModel):
+    success_list: list[BatchBinaryOperationSuccessItem] = Field(default_factory=list)
+    error_list: list[BatchBinaryOperationErrorItem] = Field(default_factory=list)
+
+
 class MergePlanItem(BaseModel):
     condition_id: str
     market_slug: str | None = None
@@ -73,7 +97,6 @@ class MergeErrorItem(BaseModel):
 
 
 class MergeAllResult(BaseModel):
-    dry_run: bool = False
     plan_list: list[MergePlanItem] = Field(default_factory=list)
     success_list: list[MergeSuccessItem] = Field(default_factory=list)
     error_list: list[MergeErrorItem] = Field(default_factory=list)

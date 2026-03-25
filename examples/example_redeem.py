@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     # Redeem in batch
     condition_ids = [
-        "0x31fb435a9506d14f00b9de5e5e4491cf2223b6d40a2525d9afa8b620b61b50e2",
+        "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5",
     ]
     redeem_batch = service.redeem(condition_ids, batch_size=10)
     print(redeem_batch)
@@ -65,9 +65,3 @@ if __name__ == "__main__":
         print("Retry condition ids:", redeem_batch.error_condition_ids)
 
 
-    # Optional - Query operations (可选操作，用于查询)
-    # can_redeem = service.is_condition_resolved(condition_id)
-    # redeem_balance = service.get_redeemable_index_and_balance(
-    #     condition_id
-    # )
-    # print(can_redeem, redeem_balance)

@@ -1,11 +1,13 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, call
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from poly_web3.web3_service.base import BaseWeb3Service
+from poly_web3.schema import MergePlanItem
 
 
 class DummyWeb3Service(BaseWeb3Service):
@@ -63,7 +65,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
 
     def test_merge_routes_to_neg_risk_adapter_when_detected_from_market_api(self):
         with patch.object(
-            BaseWeb3Service,
+            self.service,
             "get_market_by_condition_id",
             return_value={"negRisk": True},
         ):
@@ -80,7 +82,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
 
     def test_split_allows_non_negative_risk_market(self):
         with patch.object(
-            BaseWeb3Service,
+            self.service,
             "get_market_by_condition_id",
             return_value={"negRisk": False},
         ):
@@ -94,6 +96,79 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
             "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
         )
         self.assertEqual(result["txs"][0]["data"], "0xsplit")
+
+    def test_split_batch_groups_transactions_by_negative_risk(self):
+        result = self.service.split_batch(
+            operations=[
+                {"condition_id": "0xcond1", "amount": 1, "negative_risk": False},
+                {"condition_id": "0xcond2", "amount": 2, "negative_risk": True},
+                {"condition_id": "0xcond3", "amount": 3, "negative_risk": True},
+            ]
+        )
+
+        self.assertEqual(len(result.success_list), 2)
+        self.assertEqual(result.error_list, [])
+        self.assertEqual(result.success_list[0].negative_risk, False)
+        self.assertEqual(result.success_list[0].condition_ids, ["0xcond1"])
+        self.assertEqual(result.success_list[0].result["metadata"], "split")
+        self.assertEqual(len(result.success_list[0].result["txs"]), 1)
+        self.assertEqual(result.success_list[1].negative_risk, True)
+        self.assertEqual(result.success_list[1].condition_ids, ["0xcond2", "0xcond3"])
+        self.assertEqual(result.success_list[1].result["metadata"], "split")
+        self.assertEqual(len(result.success_list[1].result["txs"]), 2)
+
+    def test_merge_batch_supports_per_item_amounts(self):
+        with patch.object(
+            self.service,
+            "build_ctf_merge_tx_data",
+            side_effect=["0xmerge1", "0xmerge2"],
+        ) as mock_build:
+            result = self.service.merge_batch(
+                operations=[
+                    {"condition_id": "0xcond1", "amount": 1, "negative_risk": False},
+                    {"condition_id": "0xcond2", "amount": "2.5", "negative_risk": False},
+                ]
+            )
+
+        self.assertEqual(len(result.success_list), 1)
+        self.assertEqual(result.error_list, [])
+        self.assertEqual(result.success_list[0].condition_ids, ["0xcond1", "0xcond2"])
+        self.assertEqual(result.success_list[0].result["metadata"], "merge")
+        self.assertEqual(
+            mock_build.call_args_list,
+            [
+                call(
+                    condition_id="0xcond1",
+                    partition=[1, 2],
+                    amount=1000000,
+                    collateral_token="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                    parent_collection_id="0x" + "00" * 32,
+                ),
+                call(
+                    condition_id="0xcond2",
+                    partition=[1, 2],
+                    amount=2500000,
+                    collateral_token="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                    parent_collection_id="0x" + "00" * 32,
+                ),
+            ],
+        )
+
+    def test_split_batch_splits_large_group_by_batch_size(self):
+        result = self.service.split_batch(
+            operations=[
+                {"condition_id": "0xcond1", "amount": 1, "negative_risk": False},
+                {"condition_id": "0xcond2", "amount": 2, "negative_risk": False},
+                {"condition_id": "0xcond3", "amount": 3, "negative_risk": False},
+            ],
+            batch_size=2,
+        )
+
+        self.assertEqual(len(result.success_list), 2)
+        self.assertEqual(result.success_list[0].condition_ids, ["0xcond1", "0xcond2"])
+        self.assertEqual(result.success_list[1].condition_ids, ["0xcond3"])
+        self.assertEqual(len(result.success_list[0].result["txs"]), 2)
+        self.assertEqual(len(result.success_list[1].result["txs"]), 1)
 
     def test_redeem_from_positions_returns_structured_success_and_error_lists(self):
         self.service.submit_results = [
@@ -204,7 +279,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(by_condition["0xcond3"].mergeable, 40)
         self.assertEqual(by_condition["0xcond3"].reason, "negative_risk_excluded")
 
-    def test_merge_all_dry_run_returns_plan_without_executing(self):
+    def test_merge_all_returns_plan_and_skips_submit_when_no_executable_items(self):
         positions = [
             {
                 "conditionId": "0xcond1",
@@ -234,20 +309,46 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
             return_value=plan,
         ), patch.object(
             DummyWeb3Service,
-            "merge",
-            side_effect=AssertionError("merge should not be called"),
+            "merge_batch",
+            side_effect=AssertionError("merge_batch should not be called"),
         ):
             result = self.service.merge_all(
-                min_usdc=5,
+                min_usdc=50,
                 exclude_neg_risk=True,
-                dry_run=True,
                 max_markets=20,
             )
 
-        self.assertTrue(result.dry_run)
         self.assertEqual(len(result.plan_list), 1)
         self.assertEqual(result.success_list, [])
         self.assertEqual(result.error_list, [])
+
+    def test_plan_merge_all_uses_mergeable_positions_api(self):
+        self.service.api_client = SimpleNamespace(
+            fetch_all_mergeable_positions=lambda user_address: [
+                {
+                    "conditionId": "0xcond1",
+                    "slug": "market-one",
+                    "outcomeIndex": 0,
+                    "size": 10,
+                    "negativeRisk": False,
+                },
+                {
+                    "conditionId": "0xcond1",
+                    "slug": "market-one",
+                    "outcomeIndex": 1,
+                    "size": 8,
+                    "negativeRisk": False,
+                },
+            ]
+        )
+        self.service._resolve_user_address = lambda: "0xuser"
+
+        result = self.service.plan_merge_all(min_usdc=5, exclude_neg_risk=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].condition_id, "0xcond1")
+        self.assertEqual(result[0].mergeable, 8)
+        self.assertIsNone(result[0].reason)
 
     def test_merge_all_executes_up_to_max_markets(self):
         positions = [
@@ -293,23 +394,71 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
             return_value=plan,
         ), patch.object(
             DummyWeb3Service,
-            "merge",
-            return_value={"transactionID": "merge-tx"},
-        ) as mock_merge:
+            "merge_batch",
+            return_value=SimpleNamespace(
+                success_list=[
+                    SimpleNamespace(
+                        negative_risk=False,
+                        condition_ids=["0xcond1"],
+                        result={"transactionID": "merge-tx"},
+                    )
+                ],
+                error_list=[],
+            ),
+        ) as mock_merge_batch:
             result = self.service.merge_all(
                 min_usdc=5,
                 exclude_neg_risk=True,
-                dry_run=False,
                 max_markets=1,
+                batch_size=2,
             )
 
-        self.assertFalse(result.dry_run)
         self.assertEqual(len(result.plan_list), 2)
         self.assertEqual(len(result.success_list), 1)
         self.assertEqual(result.success_list[0].condition_id, "0xcond1")
         self.assertEqual(result.success_list[0].mergeable, 10)
         self.assertEqual(result.error_list, [])
-        self.assertEqual(mock_merge.call_count, 1)
+        mock_merge_batch.assert_called_once_with(
+            operations=[
+                {
+                    "condition_id": "0xcond1",
+                    "amount": 10,
+                    "negative_risk": False,
+                }
+            ],
+            batch_size=2,
+        )
+
+    def test_merge_all_does_not_execute_below_min_usdc(self):
+        plan = [
+            MergePlanItem(
+                condition_id="0xcond1",
+                market_slug="market-one",
+                yes_balance=4,
+                no_balance=4,
+                mergeable=4,
+                negative_risk=False,
+                reason=None,
+            )
+        ]
+
+        with patch.object(
+            DummyWeb3Service,
+            "plan_merge_all",
+            return_value=plan,
+        ), patch.object(
+            DummyWeb3Service,
+            "merge_batch",
+            side_effect=AssertionError("merge_batch should not be called"),
+        ):
+            result = self.service.merge_all(
+                min_usdc=5,
+                exclude_neg_risk=True,
+                max_markets=20,
+            )
+
+        self.assertEqual(result.success_list, [])
+        self.assertEqual(result.error_list, [])
 
 
 if __name__ == "__main__":

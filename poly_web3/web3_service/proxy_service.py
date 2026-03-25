@@ -4,13 +4,10 @@
 # @Site:
 # @File: proxy_service.py
 # @Software: PyCharm
-import requests
-
 from eth_utils import to_bytes, to_checksum_address
 
 from poly_web3.const import (
     proxy_wallet_factory_abi,
-    RELAYER_URL,
     PROXY_INIT_CODE_HASH,
     SUBMIT_TRANSACTION,
     STATE_MINED,
@@ -114,9 +111,7 @@ class ProxyWeb3Service(BaseWeb3Service):
         headers = self.relayer_client._generate_builder_headers(
             "POST", SUBMIT_TRANSACTION, req
         )
-        response = requests.post(
-            RELAYER_URL + SUBMIT_TRANSACTION, json=req, headers=headers
-        ).json()
+        response = self.api_client.submit_relayer_transaction(req=req, headers=headers)
         self._raise_relayer_quota_exceeded_if_needed(response)
         if response.get("error"):
             raise Exception(
