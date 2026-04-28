@@ -10,7 +10,7 @@ import dotenv
 from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         signature_type=1,  # signature_type=2 for Safe
         funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
     )
-    creds = client.create_or_derive_api_creds()
+    creds = client.create_or_derive_api_key()
     client.set_api_creds(creds)
     relayer_client = RelayClient(
         RELAYER_URL,
@@ -46,8 +46,8 @@ if __name__ == "__main__":
         rpc_url="https://polygon-bor.publicnode.com",
     )
 
-    condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
-    amount = 10  # amount in human USDC units
+    condition_id = "0xa2637ee58d82670126d380b8b2f442538757e0b3c715211d30cc57be78e1e619"
+    amount = 10  # amount in human pUSD units
 
     split_result = service.split(condition_id, amount)
     print(split_result)

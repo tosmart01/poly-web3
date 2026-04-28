@@ -11,7 +11,7 @@ from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
 
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         signature_type=1,  # signature_type=2 for Safe
         funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
     )
-    creds = client.create_or_derive_api_creds()
+    creds = client.create_or_derive_api_key()
     client.set_api_creds(creds)
     relayer_client = RelayClient(
         RELAYER_URL,
@@ -56,12 +56,11 @@ if __name__ == "__main__":
 
     # Redeem in batch
     condition_ids = [
-        "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5",
+        "0x6810ecd5f3109df29c10106c72752cec113c897909ada57143caca3f97fa63a4",
     ]
     redeem_batch = service.redeem(condition_ids, batch_size=10)
     print(redeem_batch)
     if redeem_batch.error_list:
         print("Redeem batch failed items:", redeem_batch.error_list)
         print("Retry condition ids:", redeem_batch.error_condition_ids)
-
 

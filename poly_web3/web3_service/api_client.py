@@ -184,7 +184,7 @@ class PolymarketAPIClient:
     @staticmethod
     def _is_positive_percent_pnl(position: dict) -> bool:
         try:
-            return float(position.get("percentPnl") or 0) > 0
+            return float(position.get("percentPnl") or 0) > 0 or position.get("currentValue" or 0) > 0
         except (TypeError, ValueError):
             return False
 

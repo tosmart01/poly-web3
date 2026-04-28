@@ -32,6 +32,23 @@ STATE_FAILED = "STATE_FAILED"
 # address
 CTF_ADDRESS = to_checksum_address("0x4d97dcd97ec945f40cf65f87097ace5ea0476045")
 USDC_POLYGON = to_checksum_address("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
+PUSD_POLYGON = to_checksum_address("0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB")
+EXCHANGE_COLLATERAL_TOKEN = PUSD_POLYGON
+CTF_COLLATERAL_TOKEN = USDC_POLYGON
+DEFAULT_COLLATERAL_TOKEN = EXCHANGE_COLLATERAL_TOKEN
+EXCHANGE_V2_ADDRESS = to_checksum_address("0xE111180000d2663C0091e4f400237545B87B996B")
+NEG_RISK_EXCHANGE_V2_ADDRESS = to_checksum_address(
+    "0xe2222d279d744050d28e00520010520000310F59"
+)
+CTF_COLLATERAL_ADAPTER_ADDRESS = to_checksum_address(
+    "0xada100874d00e3331d00f2007a9c336a65009718"
+)
+NEG_RISK_CTF_COLLATERAL_ADAPTER_ADDRESS = to_checksum_address(
+    "0xada200001000ef00d07553cee7006808f895c6f1"
+)
+PUSD_WRAPPER_ADDRESS = to_checksum_address(
+    "0x93070a847efef7f70739046a929d47a521f5b8ee"
+)
 NEG_RISK_ADAPTER_ADDRESS = to_checksum_address(
     "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
 )
@@ -271,4 +288,41 @@ CTF_ABI_PAYOUT = [
         ],
         "outputs": [{"type": "uint256"}],
     },
+]
+
+ERC20_ABI_BALANCE = [
+    {
+        "name": "balanceOf",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [{"name": "account", "type": "address"}],
+        "outputs": [{"type": "uint256"}],
+    }
+]
+
+ERC20_ABI_APPROVE = [
+    {
+        "name": "approve",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "spender", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "outputs": [{"type": "bool"}],
+    }
+]
+
+PUSD_WRAPPER_ABI_WRAP = [
+    {
+        "name": "wrap",
+        "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "token", "type": "address"},
+            {"name": "receiver", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "outputs": [],
+    }
 ]

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0
+
+- Migrate CLOB dependency and client compatibility to `py-clob-client-v2`.
+- Add Polymarket v2 pUSD collateral routing for split/merge through the CTF collateral adapters.
+- Route negative-risk split/merge through the v2 negative-risk CTF collateral adapter.
+- Add redeem post-processing to wrap redeemed USDC.e back into pUSD for continued Polymarket v2 trading.
+- Update examples, README files, and regression tests for the v2 split/redeem workflow.
+
 ## 1.0.7
 
 - Refactor HTTP requests into a dedicated API client with URL constants and shared `requests.Session` usage.

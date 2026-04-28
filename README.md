@@ -27,7 +27,7 @@ service = PolyWeb3Service(
 service.redeem_all(batch_size=10)
 service.redeem(condition_ids=["0x..."])
 
-# Split/Merge for binary markets (amount in human USDC units).
+# Split/Merge for binary markets (amount in human pUSD units).
 service.split("0x...", 10)
 service.merge("0x...", 10)
 service.merge_all(min_usdc=1, batch_size=10)
@@ -51,7 +51,7 @@ service.merge_batch([{"condition_id": "", "amount": 10}])
 
 - `split`/`merge` are designed for binary markets (Yes/No) and use the default partition internally.
 - Negative-risk markets are detected via the official Gamma markets API and are routed to the NegRisk Adapter.
-- `amount` is in human units (USDC), and is converted to base units internally.
+- `split`/`merge` route through Polymarket's v2 CTF collateral adapter: pUSD is used as exchange collateral, while the resulting CTF token IDs match the market `clobTokenIds`.
 
 ## FAQ
 
@@ -105,7 +105,7 @@ pip install "poly-web3[analysis]"
 
 ## Dependencies
 
-- `py-clob-client >= 0.25.0` - Polymarket CLOB client
+- `py-clob-client-v2 >= 1.0.0` - Polymarket CLOB v2 client
 - `py-builder-relayer-client >= 0.0.1` - Builder Relayer client
 - `web3 >= 7.0.0` - Web3.py library
 - `eth-utils == 5.3.1` - Ethereum utilities library
@@ -120,7 +120,7 @@ import dotenv
 from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
 dotenv.load_dotenv()
@@ -135,7 +135,7 @@ client = ClobClient(
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
-client.set_api_creds(client.create_or_derive_api_creds())
+client.set_api_creds(client.create_or_derive_api_key())
 
 relayer_client = RelayClient(
     RELAYER_URL,
@@ -180,7 +180,7 @@ import dotenv
 from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
 dotenv.load_dotenv()
@@ -196,7 +196,7 @@ client = ClobClient(
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
-client.set_api_creds(client.create_or_derive_api_creds())
+client.set_api_creds(client.create_or_derive_api_key())
 
 # Initialize RelayerClient
 relayer_client = RelayClient(
@@ -220,7 +220,7 @@ service = PolyWeb3Service(
 )
 
 condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
-amount = 10  # amount in human USDC units
+amount = 10  # amount in human pUSD units
 
 split_result = service.split(condition_id, amount)
 print(split_result)
@@ -273,13 +273,15 @@ The main service class that automatically selects the appropriate service implem
 
 #### Methods
 
-##### `redeem(condition_ids: list[str], batch_size: int = 20) -> RedeemResult`
+##### `redeem(condition_ids: str | list[str], batch_size: int = 20, collateral_token: str = CTF_COLLATERAL_TOKEN, wrap_redeemed_collateral: bool = True) -> RedeemResult`
 
-Execute redeem operation.
+Execute redeem operation. When Polymarket's Positions API does not return positions for explicit `condition_ids`, the service falls back to on-chain CTF balance checks for non-negative-risk markets. By default, redeemed USDC.e is wrapped back into pUSD in the same relayed transaction when the payout can be computed on-chain.
 
 **Parameters:**
-- `condition_ids` (list[str]): List of condition IDs
+- `condition_ids` (str | list[str]): Condition ID or list of condition IDs
 - `batch_size` (int): Batch size for redeem requests
+- `collateral_token` (str): CTF collateral token used for on-chain fallback, defaults to USDC.e
+- `wrap_redeemed_collateral` (bool): Wrap redeemed USDC.e back to pUSD when possible
 
 **Returns:**
 - `RedeemResult`: A pydantic object with:
@@ -290,6 +292,9 @@ Execute redeem operation.
 **Examples:**
 
 ```python
+# Single condition redeem
+result = service.redeem("0x...")
+
 # Batch redeem
 result = service.redeem(["0x...", "0x..."], batch_size=10)
 ```
@@ -312,11 +317,11 @@ See [`examples/example_redeem.py`](examples/example_redeem.py) for a complete re
 
 ##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
-Split a binary (Yes/No) position. `amount` is in human USDC units.
+Split a binary (Yes/No) position. `amount` is in human pUSD units.
 
 **Parameters:**
 - `condition_id` (str): Condition ID
-- `amount` (int | float | str): Amount in USDC
+- `amount` (int | float | str): Amount in pUSD
 - `negative_risk` (bool | None): Optional explicit market-type hint. When `None`, the SDK auto-detects via the official Gamma markets API and routes neg-risk markets to the NegRisk Adapter.
 
 **Returns:**
@@ -330,11 +335,11 @@ result = service.split("0x...", 1.25)
 
 ##### `merge(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
-Merge a binary (Yes/No) position. `amount` is in human USDC units.
+Merge a binary (Yes/No) position. `amount` is in human pUSD units.
 
 **Parameters:**
 - `condition_id` (str): Condition ID
-- `amount` (int | float | str): Amount in USDC
+- `amount` (int | float | str): Amount in pUSD
 - `negative_risk` (bool | None): Optional explicit market-type hint. When `None`, the SDK auto-detects via the official Gamma markets API and routes neg-risk markets to the NegRisk Adapter.
 
 **Returns:**

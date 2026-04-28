@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from poly_web3.web3_service.base import BaseWeb3Service
 from poly_web3.schema import MergePlanItem
+from poly_web3.clob_compat import get_clob_signature_type, get_clob_funder
 
 
 class DummyWeb3Service(BaseWeb3Service):
@@ -45,6 +46,18 @@ class DummyWeb3Service(BaseWeb3Service):
     def build_neg_risk_redeem_tx_data(self, *args, **kwargs) -> str:
         return "0xnegredeem"
 
+    def build_erc20_approve_tx_data(self, *args, **kwargs) -> str:
+        return "0xapprove"
+
+    def build_pusd_wrap_tx_data(self, *args, **kwargs) -> str:
+        return "0xwrap"
+
+    def get_redeemable_payout_amount(self, *args, **kwargs) -> int:
+        return 0
+
+    def _raise_if_insufficient_split_collateral(self, *args, **kwargs) -> None:
+        return None
+
 
 class NegRiskSplitMergeGuardTest(unittest.TestCase):
     def setUp(self):
@@ -59,7 +72,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(result["metadata"], "split")
         self.assertEqual(
             result["txs"][0]["to"].lower(),
-            "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296",
+            "0xada200001000ef00d07553cee7006808f895c6f1",
         )
         self.assertEqual(result["txs"][0]["data"], "0xnegsplit")
 
@@ -76,7 +89,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(result["metadata"], "merge")
         self.assertEqual(
             result["txs"][0]["to"].lower(),
-            "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296",
+            "0xada200001000ef00d07553cee7006808f895c6f1",
         )
         self.assertEqual(result["txs"][0]["data"], "0xnegmerge")
 
@@ -93,7 +106,7 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(result["metadata"], "split")
         self.assertEqual(
             result["txs"][0]["to"].lower(),
-            "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+            "0xada100874d00e3331d00f2007a9c336a65009718",
         )
         self.assertEqual(result["txs"][0]["data"], "0xsplit")
 
@@ -141,14 +154,14 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
                     condition_id="0xcond1",
                     partition=[1, 2],
                     amount=1000000,
-                    collateral_token="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                    collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
                     parent_collection_id="0x" + "00" * 32,
                 ),
                 call(
                     condition_id="0xcond2",
                     partition=[1, 2],
                     amount=2500000,
-                    collateral_token="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+                    collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
                     parent_collection_id="0x" + "00" * 32,
                 ),
             ],
@@ -221,6 +234,84 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
         self.assertEqual(result.error_list[0].condition_id, "0xcond1")
         self.assertEqual(result.error_list[0].market_slug, "market-one")
         self.assertIn("returned None", result.error_list[0].error)
+
+    def test_redeem_condition_id_falls_back_to_chain_when_positions_api_is_empty(self):
+        self.service.api_client = SimpleNamespace(
+            fetch_positions_by_condition_ids=lambda user_address, condition_ids: []
+        )
+        self.service._resolve_user_address = lambda: "0xuser"
+        self.service.is_negative_risk_condition = lambda condition_id: False
+        self.service.is_condition_resolved = lambda condition_id: True
+        self.service.get_redeemable_index_and_balance = (
+            lambda condition_id, collateral_token: [(0, 10)]
+        )
+
+        result = self.service.redeem("0xcond1")
+
+        self.assertEqual(result.error_list, [])
+        self.assertEqual(len(result.success_list), 1)
+        self.assertEqual(result.success_list[0]["metadata"], "redeem")
+        self.assertEqual(result.success_list[0]["txs"][0]["data"], "0xredeem")
+        self.assertEqual(
+            result.success_list[0]["txs"][0]["to"].lower(),
+            "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+        )
+
+    def test_redeem_chain_fallback_can_wrap_redeemed_collateral_to_pusd(self):
+        self.service.api_client = SimpleNamespace(
+            fetch_positions_by_condition_ids=lambda user_address, condition_ids: []
+        )
+        self.service._resolve_user_address = lambda: "0xuser"
+        self.service.is_negative_risk_condition = lambda condition_id: False
+        self.service.is_condition_resolved = lambda condition_id: True
+        self.service.get_redeemable_index_and_balance = (
+            lambda condition_id, collateral_token: [(0, 10)]
+        )
+        self.service.get_redeemable_payout_amount = (
+            lambda condition_id, collateral_token: 10_000_000
+        )
+
+        result = self.service.redeem("0xcond1")
+
+        txs = result.success_list[0]["txs"]
+        self.assertEqual([tx["data"] for tx in txs], ["0xredeem", "0xapprove", "0xwrap"])
+        self.assertEqual(
+            [tx["to"].lower() for tx in txs],
+            [
+                "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+                "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+                "0x93070a847efef7f70739046a929d47a521f5b8ee",
+            ],
+        )
+
+    def test_redeem_condition_id_reports_unresolved_chain_fallback(self):
+        self.service.api_client = SimpleNamespace(
+            fetch_positions_by_condition_ids=lambda user_address, condition_ids: []
+        )
+        self.service._resolve_user_address = lambda: "0xuser"
+        self.service.is_negative_risk_condition = lambda condition_id: False
+        self.service.is_condition_resolved = lambda condition_id: False
+
+        result = self.service.redeem("0xcond1")
+
+        self.assertEqual(result.success_list, [])
+        self.assertEqual(result.error_condition_ids, ["0xcond1"])
+        self.assertEqual(result.error_list[0].error, "condition is not resolved")
+
+    def test_split_preflight_reports_insufficient_collateral(self):
+        service = DummyWeb3Service()
+        service._resolve_user_address = lambda: "0xowner"
+        service.get_erc20_balance = lambda collateral_token, owner: 5_000_000
+
+        with self.assertRaisesRegex(
+            Exception,
+            "insufficient exchange collateral balance for split",
+        ):
+            BaseWeb3Service._raise_if_insufficient_split_collateral(
+                service,
+                amount_base_units=10_000_000,
+                collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+            )
 
     def test_build_merge_plan_from_positions_marks_missing_side_and_neg_risk(self):
         positions = [
@@ -459,6 +550,22 @@ class NegRiskSplitMergeGuardTest(unittest.TestCase):
 
         self.assertEqual(result.success_list, [])
         self.assertEqual(result.error_list, [])
+
+
+class ClobCompatTest(unittest.TestCase):
+    def test_reads_signature_type_from_v1_builder_shape(self):
+        client = SimpleNamespace(
+            builder=SimpleNamespace(sig_type=1, funder="0xfunder")
+        )
+        self.assertEqual(get_clob_signature_type(client), 1)
+        self.assertEqual(get_clob_funder(client), "0xfunder")
+
+    def test_reads_signature_type_from_v2_builder_shape(self):
+        client = SimpleNamespace(
+            builder=SimpleNamespace(signature_type=2, funder="0xfunder")
+        )
+        self.assertEqual(get_clob_signature_type(client), 2)
+        self.assertEqual(get_clob_funder(client), "0xfunder")
 
 
 if __name__ == "__main__":

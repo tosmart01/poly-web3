@@ -9,16 +9,20 @@ from decimal import Decimal, InvalidOperation, ROUND_DOWN
 import re
 
 from py_builder_relayer_client.client import RelayClient
-from py_clob_client.client import ClobClient
 from eth_utils import to_checksum_address
 from web3 import Web3
 
+from poly_web3.clob_compat import get_clob_funder, get_clob_signature_type
 from poly_web3.const import (
     RPC_URL,
     CTF_ADDRESS,
     CTF_ABI_PAYOUT,
     ZERO_BYTES32,
-    USDC_POLYGON,
+    DEFAULT_COLLATERAL_TOKEN,
+    CTF_COLLATERAL_TOKEN,
+    CTF_COLLATERAL_ADAPTER_ADDRESS,
+    NEG_RISK_CTF_COLLATERAL_ADAPTER_ADDRESS,
+    PUSD_WRAPPER_ADDRESS,
     CTF_ABI_REDEEM,
     CTF_ABI_SPLIT,
     CTF_ABI_MERGE,
@@ -28,7 +32,12 @@ from poly_web3.const import (
     NEG_RISK_ADAPTER_ABI_REDEEM,
     NEG_RISK_ADAPTER_ABI_SPLIT,
     NEG_RISK_ADAPTER_ABI_MERGE,
+    PROXY_INIT_CODE_HASH,
+    ERC20_ABI_BALANCE,
+    ERC20_ABI_APPROVE,
+    PUSD_WRAPPER_ABI_WRAP,
 )
+from poly_web3.signature.build import derive_proxy_wallet
 from poly_web3.schema import (
     BatchBinaryOperationItem,
     BatchBinaryOperationErrorItem,
@@ -52,15 +61,15 @@ class BaseWeb3Service:
 
     def __init__(
             self,
-            clob_client: ClobClient = None,
+            clob_client: Any = None,
             relayer_client: RelayClient = None,
             rpc_url: str | None = None,
     ):
         self.relayer_client = relayer_client
-        self.clob_client: ClobClient = clob_client
+        self.clob_client = clob_client
         if self.clob_client:
             self.wallet_type: WalletType = WalletType.get_with_code(
-                self.clob_client.builder.sig_type
+                get_clob_signature_type(self.clob_client)
             )
         else:
             self.wallet_type = WalletType.PROXY
@@ -71,9 +80,18 @@ class BaseWeb3Service:
             raise Exception("relayer_client must be provided")
 
     def _resolve_user_address(self):
-        funder = getattr(getattr(self.clob_client, "builder", None), "funder", None)
+        funder = get_clob_funder(self.clob_client)
         if funder:
             return funder
+        if self.wallet_type == WalletType.PROXY:
+            proxy_contract_config = self.get_contract_config()["ProxyContracts"]
+            proxy_factory = proxy_contract_config.get("ProxyFactory")
+            if proxy_factory:
+                return derive_proxy_wallet(
+                    self.clob_client.get_address(),
+                    proxy_factory,
+                    PROXY_INIT_CODE_HASH,
+                )
         return self.clob_client.get_address()
 
     def is_condition_resolved(self, condition_id: str) -> bool:
@@ -92,7 +110,9 @@ class BaseWeb3Service:
         return winners
 
     def get_redeemable_index_and_balance(
-            self, condition_id: str
+            self,
+            condition_id: str,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
     ) -> list[tuple]:
         owner = self._resolve_user_address()
         winners = self.get_winning_indexes(condition_id)
@@ -107,28 +127,142 @@ class BaseWeb3Service:
                 ZERO_BYTES32, condition_id, index_set
             ).call()
             position_id = ctf.functions.getPositionId(
-                USDC_POLYGON, collection_id
+                collateral_token, collection_id
             ).call()
             balance = ctf.functions.balanceOf(owner_checksum, position_id).call()
             if balance > 0:
                 redeemable.append((index, balance / 1000000))
         return redeemable
 
-    def build_ctf_redeem_tx_data(self, condition_id: str) -> str:
+    def get_redeemable_payout_amount(
+            self,
+            condition_id: str,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
+    ) -> int:
+        owner = self._resolve_user_address()
+        ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_PAYOUT)
+        denominator = ctf.functions.payoutDenominator(condition_id).call()
+        if denominator <= 0:
+            return 0
+        outcome_count = ctf.functions.getOutcomeSlotCount(condition_id).call()
+        owner_checksum = to_checksum_address(owner)
+        total_payout = 0
+        for index in range(outcome_count):
+            numerator = ctf.functions.payoutNumerators(condition_id, index).call()
+            if numerator <= 0:
+                continue
+            index_set = 1 << index
+            collection_id = ctf.functions.getCollectionId(
+                ZERO_BYTES32, condition_id, index_set
+            ).call()
+            position_id = ctf.functions.getPositionId(
+                collateral_token, collection_id
+            ).call()
+            balance = ctf.functions.balanceOf(owner_checksum, position_id).call()
+            if balance > 0:
+                total_payout += balance * numerator // denominator
+        return total_payout
+
+    def get_erc20_balance(self, token_address: str, owner: str | None = None) -> int:
+        token = self.w3.eth.contract(
+            address=to_checksum_address(token_address),
+            abi=ERC20_ABI_BALANCE,
+        )
+        return token.functions.balanceOf(
+            to_checksum_address(owner or self._resolve_user_address())
+        ).call()
+
+    def _raise_if_insufficient_split_collateral(
+            self,
+            amount_base_units: int,
+            collateral_token: str,
+    ) -> None:
+        owner = self._resolve_user_address()
+        balance = self.get_erc20_balance(collateral_token, owner)
+        if balance >= amount_base_units:
+            return
+        raise Exception(
+            "insufficient exchange collateral balance for split: "
+            f"owner={owner}, collateral_token={collateral_token}, "
+            f"balance={balance / 1_000_000:.6f}, "
+            f"required={amount_base_units / 1_000_000:.6f}. "
+            "Polymarket v2 split routes through the CTF collateral adapter and "
+            "uses pUSD as exchange collateral."
+        )
+
+    def build_ctf_redeem_tx_data(
+            self,
+            condition_id: str,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
+    ) -> str:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_REDEEM)
         return ctf.functions.redeemPositions(
-            USDC_POLYGON,
+            collateral_token,
             ZERO_BYTES32,
             condition_id,
             [1, 2],
         )._encode_transaction_data()
+
+    def build_erc20_approve_tx_data(
+            self,
+            spender: str,
+            amount: int,
+            token_address: str = CTF_COLLATERAL_TOKEN,
+    ) -> str:
+        token = self.w3.eth.contract(
+            address=to_checksum_address(token_address),
+            abi=ERC20_ABI_APPROVE,
+        )
+        return token.functions.approve(
+            to_checksum_address(spender),
+            amount,
+        )._encode_transaction_data()
+
+    def build_pusd_wrap_tx_data(
+            self,
+            token_address: str,
+            receiver: str,
+            amount: int,
+    ) -> str:
+        wrapper = self.w3.eth.contract(
+            address=PUSD_WRAPPER_ADDRESS,
+            abi=PUSD_WRAPPER_ABI_WRAP,
+        )
+        return wrapper.functions.wrap(
+            to_checksum_address(token_address),
+            to_checksum_address(receiver),
+            amount,
+        )._encode_transaction_data()
+
+    def _build_wrap_redeemed_collateral_txs(self, amount: int) -> list[Any]:
+        if amount <= 0:
+            return []
+        owner = self._resolve_user_address()
+        return [
+            self._build_ctf_tx(
+                CTF_COLLATERAL_TOKEN,
+                self.build_erc20_approve_tx_data(
+                    spender=PUSD_WRAPPER_ADDRESS,
+                    amount=amount,
+                    token_address=CTF_COLLATERAL_TOKEN,
+                ),
+            ),
+            self._build_ctf_tx(
+                PUSD_WRAPPER_ADDRESS,
+                self.build_pusd_wrap_tx_data(
+                    token_address=CTF_COLLATERAL_TOKEN,
+                    receiver=owner,
+                    amount=amount,
+                ),
+            ),
+        ]
 
     def build_ctf_split_tx_data(
             self,
             condition_id: str,
             partition: list[int],
             amount: int,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> str:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_SPLIT)
@@ -145,7 +279,7 @@ class BaseWeb3Service:
             condition_id: str,
             partition: list[int],
             amount: int,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> str:
         ctf = self.w3.eth.contract(address=CTF_ADDRESS, abi=CTF_ABI_MERGE)
@@ -162,7 +296,7 @@ class BaseWeb3Service:
             condition_id: str,
             partition: list[int],
             amount: int,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> str:
         nr_adapter = self.w3.eth.contract(
@@ -181,7 +315,7 @@ class BaseWeb3Service:
             condition_id: str,
             partition: list[int],
             amount: int,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> str:
         nr_adapter = self.w3.eth.contract(
@@ -239,7 +373,7 @@ class BaseWeb3Service:
             action: str,
             condition_id: str,
             amount: int | float | str | Decimal,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
             negative_risk: bool | None = None,
     ) -> tuple[bool, Any]:
@@ -248,7 +382,11 @@ class BaseWeb3Service:
             negative_risk=negative_risk,
         )
         amount_base_units = self._to_usdc_base_units(amount)
-        to = NEG_RISK_ADAPTER_ADDRESS if is_negative_risk else CTF_ADDRESS
+        to = (
+            NEG_RISK_CTF_COLLATERAL_ADAPTER_ADDRESS
+            if is_negative_risk
+            else CTF_COLLATERAL_ADAPTER_ADDRESS
+        )
 
         if action == "split":
             data = (
@@ -297,7 +435,7 @@ class BaseWeb3Service:
             action: str,
             operations: list[BatchBinaryOperationItem | dict],
             batch_size: int = 10,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> BatchBinaryOperationResult:
         normalized_operations = self._normalize_batch_binary_operation_items(
@@ -350,7 +488,11 @@ class BaseWeb3Service:
                     )
         return batch_result
 
-    def _build_redeem_txs_from_positions(self, positions: list[dict]) -> list[Any]:
+    def _build_redeem_txs_from_positions(
+            self,
+            positions: list[dict],
+            wrap_redeemed_collateral: bool = True,
+    ) -> list[Any]:
         neg_amounts_by_condition: dict[str, list[float]] = {}
         normal_conditions: set[str] = set()
         for pos in positions:
@@ -377,13 +519,18 @@ class BaseWeb3Service:
                     self.build_neg_risk_redeem_tx_data(condition_id, int_amounts),
                 )
             )
+        wrap_amount = 0
         for condition_id in normal_conditions:
+            if wrap_redeemed_collateral:
+                wrap_amount += self.get_redeemable_payout_amount(condition_id)
             txs.append(
                 self._build_redeem_tx(
                     CTF_ADDRESS,
                     self.build_ctf_redeem_tx_data(condition_id),
                 )
             )
+        if wrap_redeemed_collateral and wrap_amount > 0:
+            txs.extend(self._build_wrap_redeemed_collateral_txs(wrap_amount))
         return txs
 
     def _submit_transactions(self, txs: list[Any], metadata: str) -> dict | None:
@@ -490,7 +637,11 @@ class BaseWeb3Service:
         return error_items
 
     def _redeem_batch(
-            self, condition_ids: list[str], batch_size: int
+            self,
+            condition_ids: list[str],
+            batch_size: int,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
+            wrap_redeemed_collateral: bool = True,
     ) -> RedeemResult:
         """
         Fetch positions by condition IDs in batches, then redeem each batch.
@@ -503,13 +654,129 @@ class BaseWeb3Service:
             positions = self.api_client.fetch_positions_by_condition_ids(
                 user_address=user_address, condition_ids=batch
             )
-            batch_result = self._redeem_from_positions(positions, len(batch))
-            redeem_result.success_list.extend(batch_result.success_list)
-            redeem_result.error_list.extend(batch_result.error_list)
+            position_condition_ids = {
+                pos.get("conditionId") for pos in positions if pos.get("conditionId")
+            }
+            if positions:
+                batch_result = self._redeem_from_positions(
+                    positions,
+                    len(batch),
+                    wrap_redeemed_collateral=wrap_redeemed_collateral,
+                )
+                redeem_result.success_list.extend(batch_result.success_list)
+                redeem_result.error_list.extend(batch_result.error_list)
+
+            missing_condition_ids = [
+                condition_id
+                for condition_id in batch
+                if condition_id not in position_condition_ids
+            ]
+            if missing_condition_ids:
+                chain_result = self._redeem_conditions_from_chain(
+                    condition_ids=missing_condition_ids,
+                    batch_size=len(missing_condition_ids),
+                    collateral_token=collateral_token,
+                    wrap_redeemed_collateral=wrap_redeemed_collateral,
+                )
+                redeem_result.success_list.extend(chain_result.success_list)
+                redeem_result.error_list.extend(chain_result.error_list)
+        return redeem_result
+
+    def _redeem_conditions_from_chain(
+            self,
+            condition_ids: list[str],
+            batch_size: int,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
+            wrap_redeemed_collateral: bool = True,
+    ) -> RedeemResult:
+        redeem_result = RedeemResult()
+        for batch in self._chunk_condition_ids(condition_ids, batch_size):
+            txs: list[Any] = []
+            tx_condition_ids: list[str] = []
+            wrap_amount = 0
+            for condition_id in batch:
+                try:
+                    if self.is_negative_risk_condition(condition_id):
+                        redeem_result.error_list.append(
+                            RedeemErrorItem(
+                                condition_id=condition_id,
+                                error=(
+                                    "negative risk direct chain redeem is not supported "
+                                    "without position amounts from the Data API"
+                                ),
+                            )
+                        )
+                        continue
+                    if not self.is_condition_resolved(condition_id):
+                        redeem_result.error_list.append(
+                            RedeemErrorItem(
+                                condition_id=condition_id,
+                                error="condition is not resolved",
+                            )
+                        )
+                        continue
+                    balances = self.get_redeemable_index_and_balance(
+                        condition_id=condition_id,
+                        collateral_token=collateral_token,
+                    )
+                    if not balances:
+                        redeem_result.error_list.append(
+                            RedeemErrorItem(
+                                condition_id=condition_id,
+                                error=(
+                                    "no redeemable ERC1155 balance found on-chain "
+                                    f"for collateral_token={collateral_token}"
+                                ),
+                            )
+                        )
+                        continue
+                    if wrap_redeemed_collateral and collateral_token == CTF_COLLATERAL_TOKEN:
+                        wrap_amount += self.get_redeemable_payout_amount(
+                            condition_id=condition_id,
+                            collateral_token=collateral_token,
+                        )
+                    txs.append(
+                        self._build_redeem_tx(
+                            CTF_ADDRESS,
+                            self.build_ctf_redeem_tx_data(
+                                condition_id=condition_id,
+                                collateral_token=collateral_token,
+                            ),
+                        )
+                    )
+                    tx_condition_ids.append(condition_id)
+                except Exception as exc:
+                    redeem_result.error_list.append(
+                        RedeemErrorItem(
+                            condition_id=condition_id,
+                            error=str(exc),
+                        )
+                    )
+
+            if not txs:
+                continue
+            if wrap_redeemed_collateral and wrap_amount > 0:
+                txs.extend(self._build_wrap_redeemed_collateral_txs(wrap_amount))
+            try:
+                redeem_res = self._submit_redeem(txs)
+                if redeem_res is None:
+                    raise Exception("redeem execute returned None")
+                redeem_result.success_list.append(redeem_res)
+            except Exception as exc:
+                for condition_id in tx_condition_ids:
+                    redeem_result.error_list.append(
+                        RedeemErrorItem(
+                            condition_id=condition_id,
+                            error=str(exc),
+                        )
+                    )
         return redeem_result
 
     def _redeem_from_positions(
-            self, positions: list[dict], batch_size: int
+            self,
+            positions: list[dict],
+            batch_size: int,
+            wrap_redeemed_collateral: bool = True,
     ) -> RedeemResult:
         """
         Build and submit redeem transactions from a list of positions.
@@ -530,7 +797,10 @@ class BaseWeb3Service:
             for condition_id in batch:
                 batch_positions.extend(positions_by_condition.get(condition_id, []))
             try:
-                txs = self._build_redeem_txs_from_positions(batch_positions)
+                txs = self._build_redeem_txs_from_positions(
+                    batch_positions,
+                    wrap_redeemed_collateral=wrap_redeemed_collateral,
+                )
                 if not txs:
                     continue
                 redeem_res = self._submit_redeem(txs)
@@ -544,7 +814,7 @@ class BaseWeb3Service:
                         continue
                     volume = 1 / buy_price * (buy_price * size)
                     logger.info(
-                        f"{pos.get('slug')} redeem success, volume={volume:.4f} usdc"
+                        f"{pos.get('slug')} redeem success, volume={volume:.4f} CTF units"
                     )
             except Exception as e:
                 redeem_result.error_list.extend(
@@ -654,22 +924,37 @@ class BaseWeb3Service:
             self,
             condition_ids: str | list[str],
             batch_size: int = 10,
+            collateral_token: str = CTF_COLLATERAL_TOKEN,
+            wrap_redeemed_collateral: bool = True,
     ) -> RedeemResult:
         """
         Redeem positions for the given condition IDs.
         """
         if isinstance(condition_ids, str):
             condition_ids = [condition_ids]
-        return self._redeem_batch(condition_ids, batch_size)
+        return self._redeem_batch(
+            condition_ids=condition_ids,
+            batch_size=batch_size,
+            collateral_token=collateral_token,
+            wrap_redeemed_collateral=wrap_redeemed_collateral,
+        )
 
-    def redeem_all(self, batch_size: int = 10) -> RedeemResult:
+    def redeem_all(
+            self,
+            batch_size: int = 10,
+            wrap_redeemed_collateral: bool = True,
+    ) -> RedeemResult:
         """
         Redeem all currently redeemable positions for the user.
         """
         positions = self.api_client.fetch_redeemable_positions(
             user_address=self._resolve_user_address()
         )
-        return self._redeem_from_positions(positions, batch_size)
+        return self._redeem_from_positions(
+            positions,
+            batch_size,
+            wrap_redeemed_collateral=wrap_redeemed_collateral,
+        )
 
     def plan_merge_all(
             self,
@@ -750,7 +1035,7 @@ class BaseWeb3Service:
                     )
                 )
                 logger.info(
-                    f"{item.market_slug} merge success, mergeable={item.mergeable:.4f} usdc"
+                    f"{item.market_slug} merge success, mergeable={item.mergeable:.4f} CTF units"
                 )
 
         for error in batch_result.error_list:
@@ -776,13 +1061,17 @@ class BaseWeb3Service:
             self,
             condition_id: str,
             amount: int | float | str | Decimal,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
             negative_risk: bool | None = None,
     ) -> dict | None:
         """
         Split a binary market (Yes/No) position, amount in human units.
         """
+        self._raise_if_insufficient_split_collateral(
+            amount_base_units=self._to_usdc_base_units(amount),
+            collateral_token=collateral_token,
+        )
         _, tx = self._build_binary_market_tx(
             action="split",
             condition_id=condition_id,
@@ -797,7 +1086,7 @@ class BaseWeb3Service:
             self,
             operations: list[BatchBinaryOperationItem | dict],
             batch_size: int = 10,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> BatchBinaryOperationResult:
         """
@@ -815,7 +1104,7 @@ class BaseWeb3Service:
             self,
             condition_id: str,
             amount: int | float | str | Decimal,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
             negative_risk: bool | None = None,
     ) -> dict | None:
@@ -837,7 +1126,7 @@ class BaseWeb3Service:
             self,
             operations: list[BatchBinaryOperationItem | dict],
             batch_size: int = 10,
-            collateral_token: str = USDC_POLYGON,
+            collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
             parent_collection_id: str = ZERO_BYTES32,
     ) -> BatchBinaryOperationResult:
         """

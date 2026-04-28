@@ -6,7 +6,11 @@
 # @Software: PyCharm
 from decimal import Decimal
 
-from poly_web3.const import USDC_POLYGON, ZERO_BYTES32
+from poly_web3.const import (
+    CTF_COLLATERAL_TOKEN,
+    DEFAULT_COLLATERAL_TOKEN,
+    ZERO_BYTES32,
+)
 from poly_web3.schema import (
     BatchBinaryOperationItem,
     BatchBinaryOperationResult,
@@ -22,10 +26,16 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         condition_ids: str | list[str],
         batch_size: int = 10,
+        collateral_token: str = CTF_COLLATERAL_TOKEN,
+        wrap_redeemed_collateral: bool = True,
     ) -> RedeemResult:
         raise ImportError("EOA wallet redeem not supported")
 
-    def redeem_all(self, batch_size: int = 10) -> RedeemResult:
+    def redeem_all(
+        self,
+        batch_size: int = 10,
+        wrap_redeemed_collateral: bool = True,
+    ) -> RedeemResult:
         raise ImportError("EOA wallet redeem not supported")
 
     def plan_merge_all(
@@ -48,7 +58,7 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         condition_id: str,
         amount: int | float | str | Decimal,
-        collateral_token: str = USDC_POLYGON,
+        collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
         parent_collection_id: str = ZERO_BYTES32,
         negative_risk: bool | None = None,
     ) -> dict | None:
@@ -58,7 +68,7 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         operations: list[BatchBinaryOperationItem | dict],
         batch_size: int = 10,
-        collateral_token: str = USDC_POLYGON,
+        collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
         parent_collection_id: str = ZERO_BYTES32,
     ) -> BatchBinaryOperationResult:
         raise ImportError("EOA wallet split not supported")
@@ -67,7 +77,7 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         condition_id: str,
         amount: int | float | str | Decimal,
-        collateral_token: str = USDC_POLYGON,
+        collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
         parent_collection_id: str = ZERO_BYTES32,
         negative_risk: bool | None = None,
     ) -> dict | None:
@@ -77,7 +87,7 @@ class EOAWeb3Service(BaseWeb3Service):
         self,
         operations: list[BatchBinaryOperationItem | dict],
         batch_size: int = 10,
-        collateral_token: str = USDC_POLYGON,
+        collateral_token: str = DEFAULT_COLLATERAL_TOKEN,
         parent_collection_id: str = ZERO_BYTES32,
     ) -> BatchBinaryOperationResult:
         raise ImportError("EOA wallet merge not supported")

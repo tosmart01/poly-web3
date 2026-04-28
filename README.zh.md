@@ -28,7 +28,7 @@ service.redeem_all(batch_size=10)
 # 指定 condition_ids 赎回
 service.redeem(condition_ids=["0x..."])
 
-# Split/Merge for binary markets (amount in human USDC units).
+# Split/Merge for binary markets (amount in human pUSD units).
 service.split("0x...", 10)
 service.merge("0x...", 10)
 # merge 所有仓位
@@ -52,7 +52,7 @@ service.merge_batch([{"condition_id": "", "amount": 10}])
 
 - `split`/`merge` 适用于二元市场（Yes/No），内部使用默认分区。
 - 负风险市场会通过官方 Gamma markets API 自动识别，并路由到 NegRisk Adapter。
-- `amount` 为 USDC 人类单位，内部自动转换为最小单位。
+- `split`/`merge` 会通过 Polymarket v2 CTF collateral adapter 执行：入参金额使用 pUSD，人类单位；最终生成的 CTF tokenId 会匹配市场 `clobTokenIds`。
 
 ## FAQ
 
@@ -108,7 +108,7 @@ pip install "poly-web3[analysis]"
 
 ## 依赖项
 
-- `py-clob-client >= 0.25.0` - Polymarket CLOB 客户端
+- `py-clob-client-v2 >= 1.0.0` - Polymarket CLOB v2 客户端
 - `py-builder-relayer-client >= 0.0.1` - Builder Relayer 客户端
 - `web3 >= 7.0.0` - Web3.py 库
 - `eth-utils == 5.3.1` - Ethereum 工具库
@@ -123,7 +123,7 @@ import dotenv
 from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
 dotenv.load_dotenv()
@@ -138,7 +138,7 @@ client = ClobClient(
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
-client.set_api_creds(client.create_or_derive_api_creds())
+client.set_api_creds(client.create_or_derive_api_key())
 
 relayer_client = RelayClient(
     RELAYER_URL,
@@ -183,7 +183,7 @@ import dotenv
 from py_builder_relayer_client.client import RelayClient
 from py_builder_signing_sdk.config import BuilderConfig
 from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
-from py_clob_client.client import ClobClient
+from py_clob_client_v2 import ClobClient
 from poly_web3 import RELAYER_URL, PolyWeb3Service
 
 dotenv.load_dotenv()
@@ -199,7 +199,7 @@ client = ClobClient(
     funder=os.getenv("POLYMARKET_PROXY_ADDRESS"),
 )
 
-client.set_api_creds(client.create_or_derive_api_creds())
+client.set_api_creds(client.create_or_derive_api_key())
 
 # 初始化 RelayerClient
 relayer_client = RelayClient(
@@ -223,7 +223,7 @@ service = PolyWeb3Service(
 )
 
 condition_id = "0xaba28be5f981580aa29a123afc8d233dd66c1f236f0d7e1bfffe07777cdb6cc5"
-amount = 10  # amount in human USDC units
+amount = 10  # amount in human pUSD units
 
 split_result = service.split(condition_id, amount)
 print(split_result)
@@ -277,13 +277,15 @@ analysis-poly
 
 #### 方法
 
-##### `redeem(condition_ids: str | list[str], batch_size: int = 20) -> RedeemResult`
+##### `redeem(condition_ids: str | list[str], batch_size: int = 20, collateral_token: str = CTF_COLLATERAL_TOKEN, wrap_redeemed_collateral: bool = True) -> RedeemResult`
 
-执行赎回操作。
+执行赎回操作。对于显式传入的 `condition_ids`，如果 Polymarket Positions API 没有返回仓位，服务会回退到链上 CTF 余额检查，支持非 negative-risk 市场。默认会在能从链上计算 payout 时，把 redeem 得到的 USDC.e 在同一笔 relayed transaction 里 wrap 回 pUSD。
 
 **参数:**
 - `condition_ids` (str | list[str]): 条件 ID 或条件 ID 列表
 - `batch_size` (int): 每批次处理数量
+- `collateral_token` (str): 链上 fallback 使用的 CTF 抵押币地址，默认 USDC.e
+- `wrap_redeemed_collateral` (bool): 尽可能把 redeem 得到的 USDC.e 自动 wrap 回 pUSD
 
 **返回:**
 - `RedeemResult`: pydantic 结果对象，包含：
@@ -319,11 +321,11 @@ service.redeem_all(batch_size=10)
 
 ##### `split(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
-拆分二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
+拆分二元市场（Yes/No）仓位，`amount` 为 pUSD 人类单位。
 
 **参数:**
 - `condition_id` (str): 条件 ID
-- `amount` (int | float | str): USDC 数量
+- `amount` (int | float | str): pUSD 数量
 - `negative_risk` (bool | None): 可选的市场类型提示。为 `None` 时，SDK 会通过官方 Gamma markets API 自动识别，并将负风险市场路由到 NegRisk Adapter。
 
 **返回:**
@@ -337,11 +339,11 @@ result = service.split("0x...", 1.25)
 
 ##### `merge(condition_id: str, amount: int | float | str, negative_risk: bool | None = None)`
 
-合并二元市场（Yes/No）仓位，`amount` 为 USDC 人类单位。
+合并二元市场（Yes/No）仓位，`amount` 为 pUSD 人类单位。
 
 **参数:**
 - `condition_id` (str): 条件 ID
-- `amount` (int | float | str): USDC 数量
+- `amount` (int | float | str): pUSD 数量
 - `negative_risk` (bool | None): 可选的市场类型提示。为 `None` 时，SDK 会通过官方 Gamma markets API 自动识别，并将负风险市场路由到 NegRisk Adapter。
 
 **返回:**
