@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/pypi/pyversions/poly-web3)
 ![License](https://img.shields.io/github/license/tosmart01/poly-web3)
 
-Python SDK for redeeming and splitting/merging Polymarket positions via Proxy/Safe wallets (gas-free).
+Python SDK for redeeming and splitting/merging Polymarket positions via Proxy/Safe wallets (gas-free). The current release supports Polymarket CLOB v2 via `py-clob-client-v2`.
 
 [English](README.md) | [中文](README.zh.md)
 
@@ -46,6 +46,7 @@ service.merge_batch([{"condition_id": "", "amount": 10}])
 - `redeem` and `redeem_all` return a `RedeemResult` pydantic object with `success_list` and `error_list`.
 - `success_list` keeps the raw relayer `execute` result structure; `error_list` exposes `condition_id`, `market_slug`, and `error` for retry/backfill.
 - `error_condition_ids` is a shortcut list derived from `error_list`, so you can directly retry with `service.redeem(result.error_condition_ids)`.
+- Non-negative-risk redeem has been updated for the CLOB v2 pUSD flow. Negative-risk redeem is implemented but has not yet been verified with a live Polymarket negative-risk redemption.
 
 ## Split/Merge Notes
 
@@ -77,6 +78,8 @@ Reference：
 **Current Status:**
 - ✅ **Proxy Wallet** - Fully supported for redeem/split/merge
 - ✅ **Safe Wallet** - Fully supported for redeem/split/merge
+- ✅ **Polymarket CLOB v2** - Supported via `py-clob-client-v2`
+- ⚠️ **Negative-risk redeem** - Code path exists, but live negative-risk redeem has not yet been tested
 - 🚧 **EOA Wallet** - Under development
 
 We welcome community contributions! If you'd like to help implement EOA wallet redeem functionality, or have other improvement suggestions, please feel free to submit a Pull Request.

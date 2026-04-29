@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/pypi/pyversions/poly-web3)
 ![License](https://img.shields.io/github/license/tosmart01/poly-web3)
 
-Polymarket Proxy 与 Safe 钱包赎回与拆分/合并仓位的 Python SDK，免 gas 费。
+Polymarket Proxy 与 Safe 钱包赎回与拆分/合并仓位的 Python SDK，免 gas 费。当前版本已支持 Polymarket CLOB v2，并使用 `py-clob-client-v2`。
 
 [English](README.md) | 中文
 
@@ -47,6 +47,7 @@ service.merge_batch([{"condition_id": "", "amount": 10}])
 - `redeem` 和 `redeem_all` 现在都返回 `RedeemResult` 这个 pydantic 对象，包含 `success_list` 和 `error_list`。
 - `success_list` 保留原始 relayer `execute` 返回结构；`error_list` 会带上 `condition_id`、`market_slug` 和 `error`，方便回溯和重试。
 - `error_condition_ids` 是从 `error_list` 派生出的快捷重试列表，可直接 `service.redeem(result.error_condition_ids)`。
+- 普通非 negative-risk 市场的 redeem 已按 CLOB v2 pUSD 流程更新；negative-risk redeem 代码路径已保留，但还没有经过真实 Polymarket negative-risk 赎回测试。
 
 ## 拆分/合并说明
 
@@ -80,6 +81,8 @@ Reference / 参考链接：
 **当前状态：**
 - ✅ **Proxy 代理钱包** - 已完全支持 redeem/split/merge
 - ✅ **Safe 钱包** - 已完全支持 redeem/split/merge
+- ✅ **Polymarket CLOB v2** - 已通过 `py-clob-client-v2` 支持
+- ⚠️ **Negative-risk redeem** - 代码路径已存在，但还没有经过真实 negative-risk redeem 测试
 - 🚧 **EOA 钱包** - 开发中
 
 我们欢迎社区贡献！如果您想帮助实现 EOA 钱包相关功能支持，或者有其他改进建议，欢迎提交 Pull Request。
