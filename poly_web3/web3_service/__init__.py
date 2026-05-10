@@ -7,3 +7,4 @@
 from poly_web3.web3_service.eoa_service import EOAWeb3Service
 from poly_web3.web3_service.proxy_service import ProxyWeb3Service
 from poly_web3.web3_service.safe_service import SafeWeb3Service
+from poly_web3.web3_service.deposit_wallet_service import DepositWalletWeb3Service
