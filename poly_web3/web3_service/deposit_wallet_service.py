@@ -25,7 +25,7 @@ class DepositWalletWeb3Service(BaseWeb3Service):
     ``execute_deposit_wallet_batch`` 提交。
     """
 
-    DEFAULT_DEADLINE_SEC = 240
+    DEFAULT_DEADLINE_SEC = 14400
 
     def _build_redeem_tx(self, to: str, data: str) -> dict:
         # 字段与 ProxyWeb3Service 保持一致以复用基类逻辑；
