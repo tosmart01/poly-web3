@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- Extend `DepositWalletWeb3Service.DEFAULT_DEADLINE_SEC` from 240 seconds to 14,400 seconds to avoid `deadline too soon` failures when submitting deposit-wallet batches.
+
 ## 2.0.1
 
 - Add `POLY_1271` deposit wallet support and route redeem/split/merge batches through `execute_deposit_wallet_batch`.
